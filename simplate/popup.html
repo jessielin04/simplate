@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Simplate</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+
+<!-- Step 0: Welcome -->
+<div id="step-welcome" class="step active">
+  <div class="welcome-screen">
+    <div class="logo-circle">
+      <img src="simplate-logo.png" alt="Simplate logo" class="logo-img" onerror="this.style.display='none'" />
+      <div class="logo-emoji">🥕</div>
+    </div>
+    <p class="welcome-sub">welcome to</p>
+    <h1 class="brand-name">Plately</h1>
+    <p class="tagline">Your personal nutrition assistant,<br>right in your cart.</p>
+    <button class="btn-primary" id="startBtn">Get Started</button>
+  </div>
+</div>
+
+<!-- Step 1: Dietary Restrictions -->
+<div id="step-diet" class="step">
+  <div class="onboard-header">
+    <div class="logo-sm"><span>🥕</span> Plately</div>
+    <span class="step-count">1/2</span>
+  </div>
+  <div class="onboard-body">
+    <h2>Dietary restrictions</h2>
+    <p class="onboard-sub">Select everything that applies to you.</p>
+
+    <div class="section-label">LIFESTYLE</div>
+    <div class="pill-grid">
+      <button class="pill" data-group="lifestyle">Vegan</button>
+      <button class="pill" data-group="lifestyle">Vegetarian</button>
+      <button class="pill" data-group="lifestyle">Pescatarian</button>
+      <button class="pill" data-group="lifestyle">Halal</button>
+    </div>
+
+    <div class="section-label">ALLERGIES</div>
+    <div class="pill-grid">
+      <button class="pill" data-group="allergy">Gluten-free</button>
+      <button class="pill" data-group="allergy">Nut-free</button>
+      <button class="pill" data-group="allergy">Dairy-free</button>
+      <button class="pill" data-group="allergy">Egg-free</button>
+      <button class="pill" data-group="allergy">Soy-free</button>
+    </div>
+
+    <div class="section-label">ANYTHING ELSE?</div>
+    <input class="text-input" placeholder="e.g. no shellfish, low sodium" id="dietOther" />
+  </div>
+  <div class="onboard-footer">
+    <button class="btn-full" id="dietNextBtn">Next →</button>
+    <div class="dots">
+      <span class="dot active"></span><span class="dot"></span>
+    </div>
+  </div>
+</div>
+
+<!-- Step 2: Health Goals -->
+<div id="step-goals" class="step">
+  <div class="onboard-header">
+    <div class="logo-sm"><span>🥕</span> Plately</div>
+    <span class="step-count">2/2</span>
+  </div>
+  <div class="onboard-body">
+    <h2>Your health goals</h2>
+    <p class="onboard-sub">We'll tailor every recommendation to you.</p>
+
+    <div class="section-label">I WANT TO</div>
+    <div class="pill-grid vertical">
+      <button class="pill selected" data-group="goal">Lose weight</button>
+      <button class="pill" data-group="goal">Build muscle</button>
+      <button class="pill" data-group="goal">More energy</button>
+      <button class="pill" data-group="goal">Manage diabetes</button>
+    </div>
+
+    <div class="section-label">HOUSEHOLD SIZE</div>
+    <div class="stepper-row">
+      <button class="stepper-btn" id="decrementHH">−</button>
+      <span id="hhCount">2</span>
+      <button class="stepper-btn" id="incrementHH">+</button>
+      <span class="stepper-label">people</span>
+    </div>
+  </div>
+  <div class="onboard-footer">
+    <button class="btn-full" id="finishBtn">Let's go</button>
+    <button class="btn-back" id="goBackBtn">← Back</button>
+    <div class="dots">
+      <span class="dot"></span><span class="dot active"></span>
+    </div>
+  </div>
+</div>
+
+<!-- Main App Shell -->
+<div id="step-app" class="step">
+  <div class="app-header">
+    <div class="logo-sm"><span>🥕</span> Plately</div>
+  </div>
+  <div class="tab-content" id="tabContent">
+    <!-- injected by JS -->
+  </div>
+  <nav class="bottom-nav">
+    <button class="nav-item active" data-tab="chat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+      <span>Chat</span>
+    </button>
+    <button class="nav-item" data-tab="list">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      <span>List</span>
+    </button>
+    <button class="nav-item" data-tab="meals">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      <span>Meals</span>
+    </button>
+    <button class="nav-item" data-tab="saved">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+      <span>Saved</span>
+    </button>
+    <button class="nav-item" data-tab="profile">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <span>Profile</span>
+    </button>
+  </nav>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>

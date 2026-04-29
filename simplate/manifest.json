@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Simplate",
+  "version": "1.0",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Simplate"
+  },
+  "permissions": ["storage"]
+}
