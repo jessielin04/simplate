@@ -1,71 +1,63 @@
 import httpx
-import json
-from parsel import Selector
+from config import SCRAPER_API_KEY
 
-BASE_HEADERS = {
-    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36",
-    "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
-    "accept-language": "en-US;en;q=0.9",
-    "accept-encoding": "gzip, deflate, br",
-}
-
-WALMART_SEARCH_URL = "https://www.walmart.com/search?q={query}&affinityOverride=default"
-
-# Simple in-memory cache to reduce scrape calls
 _cache: dict[str, list[dict]] = {}
+
+STRUCTURED_URL = "https://api.scraperapi.com/structured/walmart/search"
 
 
 def search_ingredient(ingredient: str, max_results: int = 5) -> list[dict]:
-    """
-    Search Walmart for a grocery ingredient.
-    Returns a list of product dicts with id, name, price, image, url.
-    """
     cache_key = ingredient.lower().strip()
     if cache_key in _cache:
         return _cache[cache_key]
 
-    url = WALMART_SEARCH_URL.format(query=ingredient.replace(" ", "+"))
-
+    print(f"[scraper] searching Walmart for: {ingredient}")
     try:
-        with httpx.Client(http2=True, timeout=10) as client:
-            response = client.get(url, headers=BASE_HEADERS)
-            response.raise_for_status()
-    except httpx.HTTPError as e:
-        raise RuntimeError(f"Failed to reach Walmart: {e}")
-
-    sel = Selector(text=response.text)
-    raw = sel.xpath('//script[@id="__NEXT_DATA__"]/text()').get()
-
-    if not raw:
-        raise RuntimeError("Could not find __NEXT_DATA__ on Walmart page. Site may have changed.")
-
-    data = json.loads(raw)
-
-    try:
-        items = (
-            data["props"]["pageProps"]["initialData"]["searchResult"]["itemStacks"][0]["items"]
+        resp = httpx.get(
+            STRUCTURED_URL,
+            params={"api_key": SCRAPER_API_KEY, "query": ingredient},
+            timeout=30,
         )
-    except (KeyError, IndexError, TypeError):
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        print(f"[scraper] request failed: {e}")
+        return []
+
+    organic = data.get("items", [])
+    if not organic:
+        print(f"[scraper] no items in response. keys: {list(data.keys())}")
         return []
 
     results = []
-    for item in items[:max_results]:
-        product_id = item.get("usItemId") or item.get("id")
-        name = item.get("name")
-        price = item.get("priceInfo", {}).get("currentPrice", {}).get("price")
-        image = item.get("imageInfo", {}).get("thumbnailUrl")
-        canonical_url = item.get("canonicalUrl", "")
-        product_url = f"https://www.walmart.com{canonical_url}" if canonical_url else None
+    for item in organic:
+        price_raw = item.get("price")
+        if price_raw is None:
+            continue
+        price_val = float(price_raw)
+        # Skip bulk/food-service items (over $50 or not sold by Walmart.com)
+        if price_val > 50:
+            continue
 
-        if product_id and name:
+        price = f"${price_val:.2f}"
+        url = item.get("url")
+        item_id = item.get("id")
+        name = item.get("name") or item.get("title")
+        image = item.get("image") or item.get("thumbnail")
+
+        if name:
             results.append({
-                "id": str(product_id),
+                "id": str(item_id) if item_id else None,
                 "name": name,
                 "price": price,
                 "image": image,
-                "url": product_url,
+                "url": url,
             })
 
+        if len(results) >= max_results:
+            break
+
+    print(f"[scraper] got {len(results)} results for '{ingredient}'")
     _cache[cache_key] = results
     return results
 
