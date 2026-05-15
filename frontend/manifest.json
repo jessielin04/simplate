@@ -3,15 +3,28 @@
   "name": "Simplate",
   "version": "1.0",
   "action": {
-    "default_popup": "popup.html",
     "default_title": "Simplate"
   },
-  "permissions": ["storage", "tabs"],
+  "side_panel": {
+    "default_path": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.walmart.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": ["storage", "tabs", "sidePanel"],
   "host_permissions": [
     "http://localhost:5000/*",
-    "http://127.0.0.1:5000/*"
+    "http://127.0.0.1:5000/*",
+    "https://www.walmart.com/*"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src http://localhost:5000 http://127.0.0.1:5000;"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src http://localhost:5000 http://127.0.0.1:5000 https://www.walmart.com;"
   }
 }

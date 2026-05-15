@@ -9,6 +9,8 @@ __pycache__/
 venv/
 env/
 
+README.md
+
 # OS
 .DS_Store
 Thumbs.db

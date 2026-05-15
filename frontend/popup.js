@@ -12,13 +12,7 @@ const state = {
   profileEditing: false,
   currentTab: 'chat',
   currentDay: 0,
-  groceryItems: [
-    { name: 'Spinach', sub: 'Click to pick a product', status: 'pending', itemId: null },
-    { name: 'Brown rice', sub: 'Mahatma Jasmine Brown Rice, Thai Fragrant Whole Grain Rice, 2 lb Bag $3.22', status: 'selected', itemId: '123456' },
-    { name: 'Olive oil', sub: 'Click to pick a product', status: 'pending', itemId: null },
-    { name: 'Garlic', sub: 'Click to pick a product', status: 'pending', itemId: null },
-    { name: 'Chicken', sub: 'Perdue Fresh No Antibiotics Ever Thin Sliced Chicken Breasts, 0.85–1.6 lbs $6.54', status: 'selected', itemId: '789012' },
-  ],
+  groceryItems: [],
   meals: {
     0: [
       { type: 'BREAKFAST', name: 'Greek yogurt with berries', meta: '320 cal | 28g protein | $3.20', liked: true },
@@ -164,6 +158,13 @@ function renderChat(el) {
   msgs.scrollTop = msgs.scrollHeight;
 }
 
+// ── WALMART SEARCH (via backend Playwright scraper) ──────
+async function searchWalmart(query, maxResults = 5) {
+  const res = await fetch(`http://localhost:5000/search?ingredient=${encodeURIComponent(query)}`);
+  const data = await res.json();
+  return data.results || [];
+}
+
 // ── GROCERY (our backend version) ────────────────────────
 function renderGrocery(el) {
   const pending = state.groceryItems.filter(i => i.status === 'pending').length;
@@ -203,24 +204,22 @@ function renderGrocery(el) {
   el.querySelectorAll('.grocery-item').forEach(row => {
     row.addEventListener('click', async () => {
       const i = parseInt(row.dataset.index);
-      if (state.groceryItems[i].status === 'pending') {
-        const name = state.groceryItems[i].name;
-        state.groceryItems[i].sub = 'Searching...';
-        renderGrocery(el);
-        try {
-          const res = await fetch(`http://localhost:5000/search?ingredient=${encodeURIComponent(name)}`);
-          const data = await res.json();
-          if (data.results && data.results.length > 0) {
-            const product = data.results[0];
-            state.groceryItems[i].status = 'selected';
-            state.groceryItems[i].sub = `${product.name} $${product.price}`;
-            state.groceryItems[i].itemId = product.id;
-          } else {
-            state.groceryItems[i].sub = 'No products found';
-          }
-        } catch (e) {
-          state.groceryItems[i].sub = 'Error fetching product';
+      const item = state.groceryItems[i];
+      const name = item.name;
+
+      item.sub = 'Searching...';
+      renderGrocery(el);
+
+      try {
+        const results = await searchWalmart(name);
+        if (results.length > 0) {
+          showProductPicker(name, results, i, el);
+        } else {
+          item.sub = 'No products found';
+          renderGrocery(el);
         }
+      } catch (e) {
+        item.sub = 'Error fetching product';
         renderGrocery(el);
       }
     });
@@ -232,20 +231,80 @@ function renderGrocery(el) {
       alert('No products selected yet. Click each item to pick a product first.');
       return;
     }
-    try {
-      const res = await fetch('http://localhost:5000/cart', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          items: selected.map(i => ({ itemId: i.itemId, quantity: 1 }))
-        })
-      });
-      const data = await res.json();
-      if (data.cart_url) {
-        chrome.tabs.create({ url: data.cart_url });
-      }
-    } catch (e) {
-      alert('Error connecting to backend. Is it running?');
+
+    // Only items with a known product URL can be auto-added
+    const urls = selected.map(i => i.productUrl).filter(Boolean);
+    if (urls.length === 0) {
+      alert('Product URLs not available. Try re-selecting your items.');
+      return;
+    }
+
+    // Show loading state on button
+    const btn = el.querySelector('#addCartBtn');
+    btn.disabled = true;
+    btn.textContent = `Adding ${urls.length} item${urls.length > 1 ? 's' : ''} to cart…`;
+
+    chrome.runtime.sendMessage({ type: 'simplate_start_atc', urls }, (response) => {
+      btn.disabled = false;
+      btn.textContent = response?.added > 0
+        ? `✓ Added ${response.added} item${response.added > 1 ? 's' : ''} — cart opening…`
+        : 'Add all to cart';
+      setTimeout(() => {
+        btn.textContent = selected.length > 0 ? 'Add all to cart' : `Add to cart | ${selected.length} pending`;
+      }, 3000);
+    });
+  });
+}
+
+// ── PRODUCT PICKER MODAL ─────────────────────────────────
+function showProductPicker(ingredientName, products, itemIndex, groceryEl) {
+  document.getElementById('productPickerModal')?.remove();
+  const modal = document.createElement('div');
+  modal.id = 'productPickerModal';
+  modal.className = 'cat-modal-overlay';
+  modal.innerHTML = `
+    <div class="cat-modal product-picker-modal">
+      <div class="cat-modal-title">Choose a product</div>
+      <div class="cat-modal-meal">${ingredientName}</div>
+      <div class="product-picker-list" id="productPickerList">
+        ${products.map((p, i) => `
+          <button class="product-picker-item" data-index="${i}">
+            ${p.image ? `<img class="product-thumb" src="${p.image}" alt="" />` : '<div class="product-thumb-placeholder">🛒</div>'}
+            <div class="product-picker-info">
+              <div class="product-picker-name">${p.name}</div>
+              <div class="product-picker-price">${p.price != null ? p.price : 'Price N/A'}</div>
+            </div>
+            <div class="product-picker-check">›</div>
+          </button>
+        `).join('')}
+      </div>
+      <button class="cat-modal-cancel" id="productPickerCancel">Cancel</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  modal.querySelectorAll('.product-picker-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const p = products[parseInt(btn.dataset.index)];
+      state.groceryItems[itemIndex].status = 'selected';
+      state.groceryItems[itemIndex].sub = `${p.name}${p.price != null ? ' ' + p.price : ''}`;
+      state.groceryItems[itemIndex].itemId = p.id;
+      state.groceryItems[itemIndex].productUrl = p.url;
+      modal.remove();
+      renderGrocery(groceryEl);
+    });
+  });
+
+  modal.querySelector('#productPickerCancel').addEventListener('click', () => {
+    state.groceryItems[itemIndex].sub = 'Click to pick a product';
+    modal.remove();
+    renderGrocery(groceryEl);
+  });
+  modal.addEventListener('click', e => {
+    if (e.target === modal) {
+      state.groceryItems[itemIndex].sub = 'Click to pick a product';
+      modal.remove();
+      renderGrocery(groceryEl);
     }
   });
 }
@@ -306,7 +365,13 @@ function renderMeals(el) {
           cats.forEach(cat => {
             if (!state.savedMeals[cat]) state.savedMeals[cat] = [];
             if (!state.savedMeals[cat].find(m => m.name === meal.name)) {
-              state.savedMeals[cat].push({ name: meal.name, meta: meal.meta });
+              state.savedMeals[cat].push({
+                name: meal.name,
+                meta: meal.meta,
+                ingredients: meal.ingredients || null,
+                instructions: meal.instructions || null,
+                description: meal.description || null
+              });
             }
           });
           renderMeals(el);
@@ -366,13 +431,28 @@ function renderSaved(el) {
             ${items.length === 0
               ? `<p class="saved-empty-cat">No saved ${cat.toLowerCase()} yet.</p>`
               : items.map((m, i) => `
-                  <div class="saved-item">
+                  <div class="saved-item" data-cat="${cat}" data-index="${i}">
                     <div class="saved-item-thumb">${catIcon(cat)}</div>
                     <div class="saved-item-info">
                       <div class="saved-item-name">${m.name}</div>
                       <div class="saved-item-meta">${m.meta}</div>
                     </div>
+                    <button class="saved-item-expand" data-cat="${cat}" data-index="${i}" title="View recipe">▾</button>
                     <button class="saved-item-heart liked" data-cat="${cat}" data-index="${i}">♥</button>
+                  </div>
+                  <div class="saved-recipe-detail" id="saved-detail-${cat}-${i}" style="display:none">
+                    ${m.description ? `<p class="saved-recipe-desc">${m.description}</p>` : ''}
+                    ${m.ingredients ? `
+                      <div class="saved-recipe-section">Ingredients</div>
+                      <ul class="saved-recipe-list">
+                        ${m.ingredients.map(ing => `<li>${ing.quantity} ${ing.name}</li>`).join('')}
+                      </ul>` : ''}
+                    ${m.instructions ? `
+                      <div class="saved-recipe-section">Instructions</div>
+                      <ol class="saved-recipe-list">
+                        ${m.instructions.map(step => `<li>${step}</li>`).join('')}
+                      </ol>` : ''}
+                    ${!m.ingredients && !m.instructions ? `<p class="saved-recipe-desc" style="font-style:italic">No recipe details available.</p>` : ''}
                   </div>`).join('')}
           </div>`;
         }).join('')}
@@ -396,6 +476,18 @@ function renderSaved(el) {
     btn.addEventListener('click', () => {
       state.savedFilter = btn.dataset.cat;
       renderSaved(el);
+    });
+  });
+  el.querySelectorAll('.saved-item-expand').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const cat = btn.dataset.cat;
+      const idx = btn.dataset.index;
+      const detail = el.querySelector(`#saved-detail-${cat}-${idx}`);
+      if (!detail) return;
+      const isOpen = detail.style.display !== 'none';
+      detail.style.display = isOpen ? 'none' : 'block';
+      btn.textContent = isOpen ? '▾' : '▴';
     });
   });
   el.querySelectorAll('.saved-item-heart').forEach(btn => {
