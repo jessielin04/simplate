@@ -1146,4 +1146,16 @@ body {
 .saved-recipe-list li {
   line-height: 1.4;
   color: #2d4a36;
+}.logo-img {
+  width: 200px;
+  height: 200px;
+  object-fit: contain;
+  margin-bottom: 16px;
+}
+
+.logo-sm-img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  vertical-align: middle;
 }
