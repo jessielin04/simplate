@@ -10,9 +10,16 @@ const state = {
   profileName: 'Mary Jane',
   profilePhoto: null,
   profileEditing: false,
+  fulfillmentPreference: 'delivery', // 'delivery' | 'pickup'
   currentTab: 'chat',
   currentDay: 0,
-  groceryItems: [],
+  groceryItems: [
+    { name: 'Spinach', sub: 'Click to pick a product', status: 'pending', itemId: null },
+    { name: 'Brown rice', sub: 'Mahatma Jasmine Brown Rice, Thai Fragrant Whole Grain Rice, 2 lb Bag $3.22', status: 'selected', itemId: '123456' },
+    { name: 'Olive oil', sub: 'Click to pick a product', status: 'pending', itemId: null },
+    { name: 'Garlic', sub: 'Click to pick a product', status: 'pending', itemId: null },
+    { name: 'Chicken', sub: 'Perdue Fresh No Antibiotics Ever Thin Sliced Chicken Breasts, 0.85–1.6 lbs $6.54', status: 'selected', itemId: '789012' },
+  ],
   meals: {
     0: [
       { type: 'BREAKFAST', name: 'Greek yogurt with berries', meta: '320 cal | 28g protein | $3.20', liked: true },
@@ -158,7 +165,7 @@ function renderChat(el) {
   msgs.scrollTop = msgs.scrollHeight;
 }
 
-// ── WALMART SEARCH (via backend Playwright scraper) ──────
+// ── WALMART SEARCH (via backend scraper) ─────────────────
 async function searchWalmart(query, maxResults = 5) {
   const res = await fetch(`http://localhost:5000/search?ingredient=${encodeURIComponent(query)}`);
   const data = await res.json();
@@ -244,7 +251,7 @@ function renderGrocery(el) {
     btn.disabled = true;
     btn.textContent = `Adding ${urls.length} item${urls.length > 1 ? 's' : ''} to cart…`;
 
-    chrome.runtime.sendMessage({ type: 'simplate_start_atc', urls }, (response) => {
+    chrome.runtime.sendMessage({ type: 'simplate_start_atc', urls, fulfillment: state.fulfillmentPreference }, (response) => {
       btn.disabled = false;
       btn.textContent = response?.added > 0
         ? `✓ Added ${response.added} item${response.added > 1 ? 's' : ''} — cart opening…`
@@ -309,75 +316,20 @@ function showProductPicker(ingredientName, products, itemIndex, groceryEl) {
   });
 }
 
-// ── MEALS ─────────────────────────────────────────────────
-// selectedDate tracks which real calendar date is selected
-// We store it as { year, month (0-indexed), day }
-function getTodayObj() {
-  const now = new Date();
-  return { year: now.getFullYear(), month: now.getMonth(), day: now.getDate() };
-}
-
-if (!state.selectedDate) state.selectedDate = getTodayObj();
-
-// Build a day-key string like "2025-6-14" to key into state.meals
-function dateKey(y, m, d) { return `${y}-${m}-${d}`; }
-
-// Get meals for a date, falling back to default meals[0]
-function getMealsForDate(y, m, d) {
-  const key = dateKey(y, m, d);
-  const todayObj = getTodayObj();
-  const todayKey = dateKey(todayObj.year, todayObj.month, todayObj.day);
-  // Map existing meals[0] to today and meals[1] to tomorrow for demo
-  if (key === todayKey) return state.meals[0];
-  const tomorrow = new Date(todayObj.year, todayObj.month, todayObj.day + 1);
-  const tomorrowKey = dateKey(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate());
-  if (key === tomorrowKey && state.meals[1]) return state.meals[1];
-  return state.meals[0];
-}
-
+// ── MEALS (their version with category picker) ───────────
 function renderMeals(el) {
-  const today = getTodayObj();
-  const sel = state.selectedDate;
-  const meals = getMealsForDate(sel.year, sel.month, sel.day);
-
-  // Build 7-day strip starting from today
-  const stripDays = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(today.year, today.month, today.day + i);
-    stripDays.push({ year: d.getFullYear(), month: d.getMonth(), day: d.getDate() });
-  }
-
-  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-
-  // Format selected date label
-  const selDateObj = new Date(sel.year, sel.month, sel.day);
-  const isToday = sel.year === today.year && sel.month === today.month && sel.day === today.day;
-  const dateLabel = isToday ? 'Today' : `${dayNames[selDateObj.getDay()]}, ${monthNames[sel.month]} ${sel.day}`;
+  const today = state.currentDay;
+  const meals = state.meals[today] || state.meals[0];
 
   el.innerHTML = `
     <div class="meals-wrap">
-      <div class="meals-date-bar">
-        <span class="meals-date-label">${dateLabel}</span>
-        <button class="cal-icon-btn" id="calIconBtn" title="Open calendar">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-            <line x1="16" y1="2" x2="16" y2="6"/>
-            <line x1="8" y1="2" x2="8" y2="6"/>
-            <line x1="3" y1="10" x2="21" y2="10"/>
-          </svg>
-        </button>
-      </div>
       <div class="day-tabs">
-        ${stripDays.map(({ year, month, day }) => {
-          const d = new Date(year, month, day);
-          const isActive = sel.year === year && sel.month === month && sel.day === day;
-          return `<button class="day-tab ${isActive ? 'active' : ''}"
-            data-year="${year}" data-month="${month}" data-day="${day}">
-            <span>${dayNames[d.getDay()]}</span>
-            <span class="day-num">${day}</span>
-          </button>`;
-        }).join('')}
+        ${days.map((d, i) => `
+          <button class="day-tab ${i === today ? 'active' : ''}" data-day="${i}">
+            <span>${d}</span>
+            <span class="day-num">${i + 1}</span>
+          </button>
+        `).join('')}
       </div>
       <div class="meal-cards">
         ${meals.map((m, mi) => `
@@ -387,8 +339,7 @@ function renderMeals(el) {
               <div class="meal-name">${m.name}</div>
               <div class="meal-meta">${m.meta}</div>
             </div>
-            <button class="heart-btn ${m.liked ? 'liked' : ''}"
-              data-year="${sel.year}" data-month="${sel.month}" data-day="${sel.day}" data-meal="${mi}">
+            <button class="heart-btn ${m.liked ? 'liked' : ''}" data-day="${today}" data-meal="${mi}">
               ${m.liked ? '♥' : '♡'}
             </button>
           </div>
@@ -400,31 +351,18 @@ function renderMeals(el) {
     </div>
   `;
 
-  // Day strip clicks
   el.querySelectorAll('.day-tab').forEach(btn => {
     btn.addEventListener('click', () => {
-      state.selectedDate = {
-        year: parseInt(btn.dataset.year),
-        month: parseInt(btn.dataset.month),
-        day: parseInt(btn.dataset.day)
-      };
+      state.currentDay = parseInt(btn.dataset.day);
       renderMeals(el);
     });
   });
 
-  // Calendar icon
-  el.querySelector('#calIconBtn').addEventListener('click', () => {
-    showCalendarDropdown(el);
-  });
-
-  // Heart buttons
   el.querySelectorAll('.heart-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const mi = parseInt(btn.dataset.meal);
-      const y = parseInt(btn.dataset.year);
-      const m = parseInt(btn.dataset.month);
       const d = parseInt(btn.dataset.day);
-      const dayMeals = getMealsForDate(y, m, d);
+      const mi = parseInt(btn.dataset.meal);
+      const dayMeals = state.meals[d] || state.meals[0];
       const meal = dayMeals[mi];
 
       if (!meal.liked) {
@@ -433,9 +371,10 @@ function renderMeals(el) {
           meal.savedCategories = cats;
           cats.forEach(cat => {
             if (!state.savedMeals[cat]) state.savedMeals[cat] = [];
-            if (!state.savedMeals[cat].find(sm => sm.name === meal.name)) {
+            if (!state.savedMeals[cat].find(m => m.name === meal.name)) {
               state.savedMeals[cat].push({
-                name: meal.name, meta: meal.meta,
+                name: meal.name,
+                meta: meal.meta,
                 ingredients: meal.ingredients || null,
                 instructions: meal.instructions || null,
                 description: meal.description || null
@@ -447,116 +386,15 @@ function renderMeals(el) {
       } else {
         meal.liked = false;
         (meal.savedCategories || []).forEach(cat => {
-          if (state.savedMeals[cat])
-            state.savedMeals[cat] = state.savedMeals[cat].filter(sm => sm.name !== meal.name);
+          if (state.savedMeals[cat]) {
+            state.savedMeals[cat] = state.savedMeals[cat].filter(m => m.name !== meal.name);
+          }
         });
         meal.savedCategories = [];
         renderMeals(el);
       }
     });
   });
-}
-
-// ── CALENDAR DROPDOWN ────────────────────────────────────
-function showCalendarDropdown(mealsEl) {
-  document.getElementById('calDropdown')?.remove();
-
-  const today = getTodayObj();
-  // Calendar view month starts at currently selected date's month
-  let viewYear = state.selectedDate.year;
-  let viewMonth = state.selectedDate.month;
-
-  const monthNames = ['January','February','March','April','May','June',
-                      'July','August','September','October','November','December'];
-  const dayNames = ['Su','Mo','Tu','We','Th','Fr','Sa'];
-
-  function buildCalHTML(year, month) {
-    const firstDay = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const prevMonthDays = new Date(year, month, 0).getDate();
-
-    const canGoPrev = true;
-
-    let cells = '';
-    // Previous month grey fill
-    for (let i = 0; i < firstDay; i++) {
-      cells += `<div class="cal-cell other-month">${prevMonthDays - firstDay + 1 + i}</div>`;
-    }
-    // Current month days
-    for (let d = 1; d <= daysInMonth; d++) {
-      const isToday = d === today.day && month === today.month && year === today.year;
-      const isSelected = d === state.selectedDate.day && month === state.selectedDate.month && year === state.selectedDate.year;
-      const isPast = new Date(year, month, d) < new Date(today.year, today.month, today.day);
-      let cls = 'cal-cell';
-      if (isPast) cls += ' cal-past'; // past days still clickable, just styled differently
-      if (isToday) cls += ' cal-today';
-      if (isSelected) cls += ' cal-selected';
-      cells += `<div class="${cls}" data-year="${year}" data-month="${month}" data-day="${d}">${d}</div>`;
-    }
-    // Fill remaining cells
-    const totalCells = Math.ceil((firstDay + daysInMonth) / 7) * 7;
-    let nextDay = 1;
-    for (let i = firstDay + daysInMonth; i < totalCells; i++) {
-      cells += `<div class="cal-cell other-month">${nextDay++}</div>`;
-    }
-
-    return `
-      <div class="cal-header">
-        <button class="cal-nav-btn" id="calPrev" ${canGoPrev ? '' : 'disabled'}>‹</button>
-        <span class="cal-month-label">${monthNames[month]} ${year}</span>
-        <button class="cal-nav-btn" id="calNext">›</button>
-      </div>
-      <div class="cal-grid">
-        ${dayNames.map(d => `<div class="cal-day-name">${d}</div>`).join('')}
-        ${cells}
-      </div>
-    `;
-  }
-
-  const dropdown = document.createElement('div');
-  dropdown.id = 'calDropdown';
-  dropdown.className = 'cal-dropdown';
-  dropdown.innerHTML = buildCalHTML(viewYear, viewMonth);
-  document.getElementById('step-app').appendChild(dropdown);
-
-  function rebind() {
-    dropdown.querySelector('#calPrev')?.addEventListener('click', () => {
-      if (viewYear === today.year && viewMonth === today.month) return;
-      viewMonth--;
-      if (viewMonth < 0) { viewMonth = 11; viewYear--; }
-      dropdown.innerHTML = buildCalHTML(viewYear, viewMonth);
-      rebind();
-    });
-    dropdown.querySelector('#calNext').addEventListener('click', () => {
-      viewMonth++;
-      if (viewMonth > 11) { viewMonth = 0; viewYear++; }
-      dropdown.innerHTML = buildCalHTML(viewYear, viewMonth);
-      rebind();
-    });
-    dropdown.querySelectorAll('.cal-cell[data-day]').forEach(cell => {
-      if (cell.classList.contains('other-month')) return;
-      cell.addEventListener('click', () => {
-        state.selectedDate = {
-          year: parseInt(cell.dataset.year),
-          month: parseInt(cell.dataset.month),
-          day: parseInt(cell.dataset.day)
-        };
-        dropdown.remove();
-        renderMeals(mealsEl);
-      });
-    });
-  }
-  rebind();
-
-  // Close on outside click
-  setTimeout(() => {
-    document.addEventListener('click', function handler(e) {
-      if (!dropdown.contains(e.target) && e.target.id !== 'calIconBtn') {
-        dropdown.remove();
-        document.removeEventListener('click', handler);
-      }
-    });
-  }, 0);
 }
 
 // ── SAVED (their version) ────────────────────────────────
@@ -567,64 +405,65 @@ function catIcon(cat) {
 }
 
 function renderSaved(el) {
-  const query = state.savedSearch || '';
-  const activeFilter = state.savedFilter || 'All';
+  const query = state.savedSearch.toLowerCase();
+  const activeFilter = state.savedFilter;
 
   el.innerHTML = `
     <div class="saved-wrap">
       <div class="saved-search-row">
         <div class="saved-search-box">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="search-icon"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input class="saved-search-input" id="savedSearchInput" placeholder="Search saved meals..." value="${query}" />
-          ${query ? '<button class="saved-search-clear" id="savedSearchClear">×</button>' : ''}
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input class="saved-search-input" id="savedSearchInput" placeholder="Search saved meals..." value="${state.savedSearch}" />
+          ${state.savedSearch ? `<button class="saved-search-clear" id="savedSearchClear">×</button>` : ''}
         </div>
       </div>
       <div class="saved-filter-row">
-        ${['All', ...savedCategories].map(cat =>
-          `<button class="saved-filter-btn ${activeFilter === cat ? 'active' : ''}" data-cat="${cat}">${cat}</button>`
-        ).join('')}
+        ${['All', ...savedCategories].map(cat => `
+          <button class="saved-filter-btn ${activeFilter === cat ? 'active' : ''}" data-cat="${cat}">${cat}</button>
+        `).join('')}
       </div>
       <div class="saved-list">
-        ${savedCategories.map(cat => {
-          if (activeFilter !== 'All' && activeFilter !== cat) return '';
-          const items = (state.savedMeals[cat] || []).filter(m =>
-            m.name.toLowerCase().includes(query.toLowerCase())
-          );
-          if (items.length === 0 && query) return '';
-          return `<div class="saved-section">
-            <div class="saved-section-header">
-              <span class="saved-section-icon">${catIcon(cat)}</span>
-              <span class="saved-section-title">${cat}</span>
-              <span class="saved-section-count">${items.length}</span>
-            </div>
-            ${items.length === 0
-              ? `<p class="saved-empty-cat">No saved ${cat.toLowerCase()} yet.</p>`
-              : items.map((m, i) => `
-                  <div class="saved-item" data-cat="${cat}" data-index="${i}">
-                    <div class="saved-item-thumb">${catIcon(cat)}</div>
-                    <div class="saved-item-info">
-                      <div class="saved-item-name">${m.name}</div>
-                      <div class="saved-item-meta">${m.meta}</div>
+        ${savedCategories
+          .filter(cat => activeFilter === 'All' || activeFilter === cat)
+          .map(cat => {
+            const items = (state.savedMeals[cat] || []).filter(m =>
+              !query || m.name.toLowerCase().includes(query)
+            );
+            if (items.length === 0 && query) return '';
+            return `<div class="saved-section">
+              <div class="saved-section-header">
+                <span class="saved-section-icon">${catIcon(cat)}</span>
+                <span class="saved-section-title">${cat}</span>
+                <span class="saved-section-count">${items.length}</span>
+              </div>
+              ${items.length === 0
+                ? `<p class="saved-empty-cat">No saved ${cat.toLowerCase()} yet.</p>`
+                : items.map((m, i) => `
+                    <div class="saved-item" data-cat="${cat}" data-index="${i}">
+                      <div class="saved-item-thumb">${catIcon(cat)}</div>
+                      <div class="saved-item-info">
+                        <div class="saved-item-name">${m.name}</div>
+                        <div class="saved-item-meta">${m.meta}</div>
+                      </div>
+                      <button class="saved-item-expand" data-cat="${cat}" data-index="${i}" title="View recipe">▾</button>
+                      <button class="saved-item-heart liked" data-cat="${cat}" data-index="${i}">♥</button>
                     </div>
-                    <button class="saved-item-expand" data-cat="${cat}" data-index="${i}" title="View recipe">▾</button>
-                    <button class="saved-item-heart liked" data-cat="${cat}" data-index="${i}">♥</button>
-                  </div>
-                  <div class="saved-recipe-detail" id="saved-detail-${cat}-${i}" style="display:none">
-                    ${m.description ? `<p class="saved-recipe-desc">${m.description}</p>` : ''}
-                    ${m.ingredients ? `
-                      <div class="saved-recipe-section">Ingredients</div>
-                      <ul class="saved-recipe-list">
-                        ${m.ingredients.map(ing => `<li>${ing.quantity} ${ing.name}</li>`).join('')}
-                      </ul>` : ''}
-                    ${m.instructions ? `
-                      <div class="saved-recipe-section">Instructions</div>
-                      <ol class="saved-recipe-list">
-                        ${m.instructions.map(step => `<li>${step}</li>`).join('')}
-                      </ol>` : ''}
-                    ${!m.ingredients && !m.instructions ? `<p class="saved-recipe-desc" style="font-style:italic">No recipe details available.</p>` : ''}
-                  </div>`).join('')}
-          </div>`;
-        }).join('')}
+                    <div class="saved-recipe-detail" id="saved-detail-${cat}-${i}" style="display:none">
+                      ${m.description ? `<p class="saved-recipe-desc">${m.description}</p>` : ''}
+                      ${m.ingredients ? `
+                        <div class="saved-recipe-section">Ingredients</div>
+                        <ul class="saved-recipe-list">
+                          ${m.ingredients.map(ing => `<li>${ing.quantity} ${ing.name}</li>`).join('')}
+                        </ul>` : ''}
+                      ${m.instructions ? `
+                        <div class="saved-recipe-section">Instructions</div>
+                        <ol class="saved-recipe-list">
+                          ${m.instructions.map(step => `<li>${step}</li>`).join('')}
+                        </ol>` : ''}
+                      ${!m.ingredients && !m.instructions ? `<p class="saved-recipe-desc" style="font-style:italic">No recipe details available.</p>` : ''}
+                    </div>`).join('')}
+            </div>`;
+          }).join('')}
         ${Object.values(state.savedMeals).every(arr => arr.length === 0)
           ? `<div class="saved-empty-state"><div class="saved-empty-icon">🔖</div><p>No saved meals yet</p><span>Tap ♡ on any meal to save it here</span></div>`
           : ''}
@@ -782,6 +621,17 @@ function renderProfile(el) {
       </div>
 
       <div class="profile-section">
+        <div class="profile-section-label">FULFILLMENT PREFERENCE</div>
+        <div class="profile-box" style="flex-direction:column;gap:8px;">
+          <p style="margin:0;font-size:12px;color:#666;">How should items be added to your cart? If your preferred option isn't available, the other will be chosen.</p>
+          <div class="fulfillment-toggle">
+            <button class="fulfill-btn ${state.fulfillmentPreference === 'delivery' ? 'active' : ''}" data-val="delivery">🚚 Delivery</button>
+            <button class="fulfill-btn ${state.fulfillmentPreference === 'pickup' ? 'active' : ''}" data-val="pickup">🏪 Pickup</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="profile-section">
         <div class="profile-section-label">HOUSEHOLD SIZE</div>
         <div class="profile-box">
           <div class="hh-stepper">
@@ -796,6 +646,15 @@ function renderProfile(el) {
       <button class="signout-btn">Sign out</button>
     </div>
   `;
+
+  el.querySelectorAll('.fulfill-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.fulfillmentPreference = btn.dataset.val;
+      chrome.storage.local.set({ fulfillmentPreference: state.fulfillmentPreference });
+      el.querySelectorAll('.fulfill-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
 
   el.querySelector('#budgetInput').addEventListener('change', e => {
     state.weeklyBudget = parseInt(e.target.value) || 0;
@@ -961,7 +820,8 @@ document.addEventListener('DOMContentLoaded', () => {
     renderTab('chat');
   });
 
-  chrome.storage.local.get(['onboarded'], result => {
+  chrome.storage.local.get(['onboarded', 'fulfillmentPreference'], result => {
+    if (result.fulfillmentPreference) state.fulfillmentPreference = result.fulfillmentPreference;
     if (result.onboarded) {
       showStep('step-app');
       renderTab('chat');

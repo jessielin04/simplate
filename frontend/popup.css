@@ -42,7 +42,12 @@ body {
   box-shadow: 0 4px 20px rgba(0,0,0,0.15);
 }
 
-.logo-img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.logo-img {
+  width: 180px;
+  height: 180px;
+  object-fit: contain;
+  margin-bottom: 8px;
+}
 .logo-emoji { font-size: 64px; line-height: 1; }
 .welcome-sub { color: #d4e8da; font-size: 13px; margin-top: 12px; }
 
@@ -346,39 +351,10 @@ body {
 ══════════════════════════════ */
 .meals-wrap { display: flex; flex-direction: column; height: 100%; }
 
-/* Date bar with label + calendar icon */
-.meals-date-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px 4px;
-  background: #f7f7f5;
-}
-.meals-date-label {
-  font-size: 15px;
-  font-weight: 700;
-  color: #1a2e22;
-}
-.cal-icon-btn {
-  background: #fff;
-  border: 1.5px solid #d0ddd4;
-  border-radius: 8px;
-  width: 34px;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: #3d6b50;
-  transition: background 0.15s;
-  flex-shrink: 0;
-}
-.cal-icon-btn:hover { background: #edf4ef; }
-
 .day-tabs {
   display: flex;
   gap: 4px;
-  padding: 6px 12px 8px;
+  padding: 10px 12px 6px;
   overflow-x: auto;
   scrollbar-width: none;
   background: #f7f7f5;
@@ -424,84 +400,6 @@ body {
 .heart-btn.liked { color: #d5825f; }
 
 .regen-bar { padding: 12px; background: #fff; border-top: 1px solid #e8ede9; }
-
-/* ── CALENDAR DROPDOWN ─────────────────────────────────── */
-.cal-dropdown {
-  position: absolute;
-  top: 108px; /* below date-bar + strip */
-  left: 10px;
-  right: 10px;
-  background: #fff;
-  border-radius: 14px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
-  z-index: 200;
-  padding: 12px;
-  border: 1px solid #e0e8e2;
-}
-.cal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-.cal-month-label {
-  font-size: 14px;
-  font-weight: 700;
-  color: #1a2e22;
-}
-.cal-nav-btn {
-  background: #f0f4f1;
-  border: none;
-  border-radius: 6px;
-  width: 28px;
-  height: 28px;
-  font-size: 16px;
-  cursor: pointer;
-  color: #3d6b50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-}
-.cal-nav-btn:disabled { color: #ccc; cursor: default; background: none; }
-.cal-nav-btn:not(:disabled):hover { background: #dff0e4; }
-
-.cal-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 2px;
-}
-.cal-day-name {
-  font-size: 10px;
-  font-weight: 600;
-  color: #9aada0;
-  text-align: center;
-  padding-bottom: 4px;
-}
-.cal-cell {
-  aspect-ratio: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 500;
-  color: #1a2e22;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.cal-cell:not(.other-month):not(.cal-past):hover { background: #edf4ef; }
-.cal-cell.other-month { color: #ccc; cursor: default; }
-.cal-cell.cal-past { color: #aaa; cursor: pointer; }
-.cal-cell.cal-past:hover { background: #edf4ef; color: #1a2e22; }
-.cal-cell.cal-today {
-  font-weight: 800;
-  color: #3d6b50;
-}
-.cal-cell.cal-selected {
-  background: #3d6b50 !important;
-  color: #fff !important;
-  border-radius: 6px;
-}
 
 /* ══════════════════════════════
    PROFILE TAB
@@ -1253,4 +1151,16 @@ body {
 .saved-recipe-list li {
   line-height: 1.4;
   color: #2d4a36;
+}.logo-img {
+  width: 200px;
+  height: 200px;
+  object-fit: contain;
+  margin-bottom: 16px;
+}
+
+.logo-sm-img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  vertical-align: middle;
 }
