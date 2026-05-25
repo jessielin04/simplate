@@ -3,7 +3,6 @@
 // then selects the preferred fulfillment method (delivery or pickup).
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  // Readiness ping — background.js uses this to confirm the script is loaded.
   if (msg.type === 'simplate_ping') {
     sendResponse({ ready: true });
     return true;
@@ -16,10 +15,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   pollAndClick()
     .then(async (success) => {
       if (success) {
-        // Wait longer for Walmart's fulfillment modal to fully render.
         await sleep(2000);
         await selectFulfillment(fulfillment);
-        // Extra wait to let the modal close and cart state update.
         await sleep(1000);
       }
       sendResponse({ success });
@@ -34,14 +31,12 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 async function selectFulfillment(preference) {
   const preferred = preference === 'delivery' ? 'delivery' : 'pickup';
   const fallback  = preference === 'delivery' ? 'pickup'   : 'delivery';
-
   const picked = await tryPickFulfillment(preferred);
   if (!picked) await tryPickFulfillment(fallback);
 }
 
 async function tryPickFulfillment(type) {
   const keyword = type === 'delivery' ? 'delivery' : 'pickup';
-
   await sleep(500);
 
   const candidates = [
@@ -51,14 +46,6 @@ async function tryPickFulfillment(type) {
   ];
 
   console.log('[simplate] tryPickFulfillment — looking for:', keyword);
-  console.log('[simplate] fulfillment candidates:', candidates.map(el => ({
-    tag: el.tagName,
-    role: el.getAttribute('role'),
-    automationId: el.getAttribute('data-automation-id'),
-    ariaLabel: el.getAttribute('aria-label'),
-    text: el.textContent.trim().slice(0, 80),
-    visible: isVisible(el),
-  })));
 
   for (const el of candidates) {
     const text = el.textContent.trim().toLowerCase();
@@ -118,12 +105,17 @@ function findATCButton() {
     if (btn && !btn.disabled && isVisible(btn)) return btn;
   }
 
-  // Fallback: text match
+  // Fallback: text match — skip carousel/recommendation sections
   for (const btn of document.querySelectorAll('button')) {
     if (
       !btn.disabled &&
       isVisible(btn) &&
-      btn.textContent.trim().toLowerCase() === 'add to cart'
+      btn.textContent.trim().toLowerCase() === 'add to cart' &&
+      !btn.closest('[data-testid*="carousel"]') &&
+      !btn.closest('[data-testid*="similar"]') &&
+      !btn.closest('[data-testid*="recommended"]') &&
+      !btn.closest('[data-testid*="sponsored"]') &&
+      !btn.closest('[data-testid*="frequently"]')
     ) {
       return btn;
     }

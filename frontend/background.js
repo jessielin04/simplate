@@ -24,15 +24,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 async function addItemsSequentially(urls, fulfillment) {
   let added = 0;
 
-  // Open a dedicated minimized window for ATC. The tab is "active" within
-  // that window (so Walmart runs JS at full speed) but the window is minimized
-  // so the user never gets pulled away from what they were doing.
-  // We close the window when the loop finishes and open the cart instead.
-  const atcWindow = await chrome.windows.create({
-    url: urls[0],
-    type: 'normal',
-    state: 'minimized',
-  });
+  // Use active:true so Walmart doesn't throttle JS — same as before.
+  // The only change from the working version: we open in a NEW WINDOW
+  // so the user's current window keeps focus. The ATC window is minimized
+  // so it runs off-screen but stays active within its own window context.
+  let atcWindow;
+  try {
+    atcWindow = await chrome.windows.create({ url: urls[0], type: 'normal', state: 'minimized' });
+  } catch (e) {
+    console.error('[simplate] could not create ATC window:', e);
+    return 0;
+  }
   const tab = atcWindow.tabs[0];
 
   for (let i = 0; i < urls.length; i++) {
@@ -42,10 +44,9 @@ async function addItemsSequentially(urls, fulfillment) {
 
     await waitForTabLoad(tab.id);
 
-    // Wait for Walmart's React app to hydrate and render the ATC button.
+    // Same timing as the working version
     await sleep(3500);
 
-    // Make sure the content script is actually ready before messaging.
     await waitForContentScript(tab.id);
 
     const success = await sendATCMessage(tab.id, fulfillment);
@@ -56,6 +57,9 @@ async function addItemsSequentially(urls, fulfillment) {
       await sleep(1500);
     }
   }
+
+  // Extra buffer so the last cart mutation commits before closing
+  await sleep(1500);
 
   try { await chrome.windows.remove(atcWindow.id); } catch (_) {}
   return added;
