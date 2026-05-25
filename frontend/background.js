@@ -23,37 +23,74 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 async function addItemsSequentially(urls, fulfillment) {
   let added = 0;
-  // NOTE: set active: true temporarily when debugging fulfillment selectors
-  // so you can open DevTools on the Walmart tab and inspect the modal.
-  // Switch back to active: false for normal use (hidden background tab).
-  const tab = await chrome.tabs.create({ url: urls[0], active: false });
+
+  // Keep tab active so Walmart doesn't throttle JS execution in the background.
+  // This is the most common reason ATC silently fails — hidden tabs defer rendering.
+  const tab = await chrome.tabs.create({ url: urls[0], active: true });
 
   for (let i = 0; i < urls.length; i++) {
-    if (i > 0) await chrome.tabs.update(tab.id, { url: urls[i] });
-    await waitForTabLoad(tab.id);
-    await sleep(2500);
-
-    try {
-      const response = await chrome.tabs.sendMessage(tab.id, { type: 'simplate_atc', fulfillment });
-      if (response?.success) {
-        added++;
-        await sleep(2000);
-      }
-    } catch (e) {
-      await sleep(2000);
-      try {
-        const response = await chrome.tabs.sendMessage(tab.id, { type: 'simplate_atc', fulfillment });
-        if (response?.success) {
-          added++;
-          await sleep(2000);
-        }
-      } catch (_) {}
+    if (i > 0) {
+      await chrome.tabs.update(tab.id, { url: urls[i] });
     }
-    await sleep(500);
+
+    await waitForTabLoad(tab.id);
+
+    // Wait for Walmart's React app to hydrate and render the ATC button.
+    // 3.5s is more reliable than 2.5s, especially on first product load.
+    await sleep(3500);
+
+    // Make sure the content script is actually ready before messaging.
+    await waitForContentScript(tab.id);
+
+    const success = await sendATCMessage(tab.id, fulfillment);
+    if (success) {
+      added++;
+      // Give the fulfillment modal time to appear and be dismissed before moving on.
+      await sleep(3000);
+    } else {
+      await sleep(1500);
+    }
   }
 
   try { await chrome.tabs.remove(tab.id); } catch (_) {}
   return added;
+}
+
+// Ping the content script until it responds, with a timeout.
+function waitForContentScript(tabId, timeoutMs = 8000) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    function attempt() {
+      chrome.tabs.sendMessage(tabId, { type: 'simplate_ping' }, (response) => {
+        if (chrome.runtime.lastError) {
+          if (Date.now() - start < timeoutMs) {
+            setTimeout(attempt, 400);
+          } else {
+            resolve(false); // timed out, proceed anyway
+          }
+        } else {
+          resolve(true);
+        }
+      });
+    }
+    attempt();
+  });
+}
+
+async function sendATCMessage(tabId, fulfillment) {
+  try {
+    const response = await chrome.tabs.sendMessage(tabId, { type: 'simplate_atc', fulfillment });
+    return response?.success === true;
+  } catch (e) {
+    // One retry after a short delay
+    await sleep(1500);
+    try {
+      const response = await chrome.tabs.sendMessage(tabId, { type: 'simplate_atc', fulfillment });
+      return response?.success === true;
+    } catch (_) {
+      return false;
+    }
+  }
 }
 
 function waitForTabLoad(tabId) {

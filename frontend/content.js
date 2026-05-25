@@ -3,6 +3,12 @@
 // then selects the preferred fulfillment method (delivery or pickup).
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // Readiness ping — background.js uses this to confirm the script is loaded.
+  if (msg.type === 'simplate_ping') {
+    sendResponse({ ready: true });
+    return true;
+  }
+
   if (msg.type !== 'simplate_atc') return;
 
   const fulfillment = msg.fulfillment || 'delivery';
@@ -10,8 +16,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   pollAndClick()
     .then(async (success) => {
       if (success) {
-        await sleep(1500);
+        // Wait longer for Walmart's fulfillment modal to fully render.
+        await sleep(2000);
         await selectFulfillment(fulfillment);
+        // Extra wait to let the modal close and cart state update.
+        await sleep(1000);
       }
       sendResponse({ success });
     })
@@ -23,8 +32,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function selectFulfillment(preference) {
-  // Walmart shows a fulfillment modal after ATC with "Delivery" and "Pickup" options.
-  // Try preferred first, fall back to the other.
   const preferred = preference === 'delivery' ? 'delivery' : 'pickup';
   const fallback  = preference === 'delivery' ? 'pickup'   : 'delivery';
 
@@ -35,19 +42,14 @@ async function selectFulfillment(preference) {
 async function tryPickFulfillment(type) {
   const keyword = type === 'delivery' ? 'delivery' : 'pickup';
 
-  // Wait briefly for modal to appear
   await sleep(500);
 
-  // Cast a wide net — Walmart uses various element types for fulfillment options
   const candidates = [
     ...document.querySelectorAll(
       'button, [role="radio"], [role="tab"], [role="option"], label, [data-automation-id], [aria-label]'
     ),
   ];
 
-  // DEBUG: log all candidates so you can inspect them in DevTools
-  // Open the Walmart tab and check the Console tab after triggering ATC.
-  // Once you find the right elements, you can remove these console.log lines.
   console.log('[simplate] tryPickFulfillment — looking for:', keyword);
   console.log('[simplate] fulfillment candidates:', candidates.map(el => ({
     tag: el.tagName,
@@ -59,11 +61,8 @@ async function tryPickFulfillment(type) {
   })));
 
   for (const el of candidates) {
-    // Check textContent of the element itself
     const text = el.textContent.trim().toLowerCase();
-    // Also check aria-label (some Walmart buttons label via aria instead of text)
     const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
-    // Also check data-automation-id
     const automationId = (el.getAttribute('data-automation-id') || '').toLowerCase();
 
     const matches =
@@ -82,7 +81,7 @@ async function tryPickFulfillment(type) {
   return false;
 }
 
-function pollAndClick(maxWaitMs = 12000, intervalMs = 400) {
+function pollAndClick(maxWaitMs = 15000, intervalMs = 400) {
   return new Promise((resolve) => {
     const start = Date.now();
 
@@ -97,6 +96,7 @@ function pollAndClick(maxWaitMs = 12000, intervalMs = 400) {
       }
       if (Date.now() - start >= maxWaitMs) {
         clearInterval(timer);
+        console.log('[simplate] ATC button not found within timeout');
         resolve(false);
       }
     }, intervalMs);
@@ -118,6 +118,7 @@ function findATCButton() {
     if (btn && !btn.disabled && isVisible(btn)) return btn;
   }
 
+  // Fallback: text match
   for (const btn of document.querySelectorAll('button')) {
     if (
       !btn.disabled &&
