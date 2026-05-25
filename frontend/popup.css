@@ -429,7 +429,7 @@ body {
 .hh-stepper { display: flex; align-items: center; gap: 8px; }
 .hh-label { font-size: 13px; color: #1a2e22; margin-right: 4px; }
 
-.target-row { display: flex; justify-content: space-between; font-size: 13px; color: #1a2e22; padding: 4px 0; }
+.target-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #1a2e22; padding: 4px 0; }
 .target-val { color: #4a7c59; font-weight: 600; }
 
 .signout-btn { width: 100%; background: none; border: none; color: #9aada0; font-size: 13px; padding: 10px; cursor: pointer; margin: 8px 0; text-align: center; }
@@ -484,7 +484,7 @@ body {
   font-size: 11px;
   font-weight: 700;
   color: #4a7c59;
-  margin-bottom: 6px;
+  margin-bottom: 3px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -522,6 +522,29 @@ body {
 }
 
 .tag-remove:hover { color: #fff; }
+/* ── Fulfillment preference pills ── */
+.fulfill-pill {
+  background: none;
+  border: 1.5px solid #c8d8cc;
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #7a8f82;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.fulfill-pill.active {
+  background: #4a7c59;
+  color: #fff;
+  border-color: #4a7c59;
+}
+
+.fulfill-pill:hover:not(.active) {
+  border-color: #4a7c59;
+  color: #4a7c59;
+}
 
 .autocomplete-wrap {
   position: relative;
@@ -1163,4 +1186,26 @@ body {
   height: 24px;
   object-fit: contain;
   vertical-align: middle;
+}
+/* ── Profile nudge banner (chat tab) ── */
+.profile-nudge-banner {
+  background: #e8f0ea;
+  color: #2a5c3a;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid #d0e0d4;
+  transition: background 0.15s;
+}
+
+.profile-nudge-banner:hover {
+  background: #dceade;
+}
+
+.profile-nudge-banner span {
+  display: block;
+  font-weight: 400;
+  font-size: 11px;
+  color: #4a7c59;
 }

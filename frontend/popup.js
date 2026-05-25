@@ -75,15 +75,22 @@ function setupStepper() {
 function setupTabs() {
   document.querySelectorAll('.nav-item').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
       state.currentTab = btn.dataset.tab;
+      syncActiveTab();
       renderTab(state.currentTab);
     });
   });
 }
 
+function syncActiveTab() {
+  document.querySelectorAll('.nav-item').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === state.currentTab);
+  });
+}
+
 function renderTab(tab) {
+  state.currentTab = tab;
+  syncActiveTab();
   const content = document.getElementById('tabContent');
   if (tab === 'chat') renderChat(content);
   else if (tab === 'list') renderGrocery(content);
@@ -102,8 +109,14 @@ function formatRecipe(recipe) {
 
 // ── CHAT (our backend version) ───────────────────────────
 function renderChat(el) {
+  const profileIncomplete = state.profileDietTags.length === 0 && state.profileGoalTags.length === 0;
   el.innerHTML = `
     <div class="chat-wrap">
+      ${profileIncomplete ? `
+        <div class="profile-nudge-banner" id="profileNudgeBtn">
+          Complete your profile
+          <span>Add dietary restrictions &amp; health goals for better suggestions →</span>
+        </div>` : ''}
       <div class="chat-messages" id="chatMessages">${state.chatMessages.map(m => `
         <div class="chat-bubble ${m.role}">${m.text.replace(/\n/g, '<br>')}</div>
       `).join('')}</div>
@@ -163,6 +176,13 @@ function renderChat(el) {
   send.addEventListener('click', sendMsg);
   input.addEventListener('keydown', e => { if (e.key === 'Enter') sendMsg(); });
   msgs.scrollTop = msgs.scrollHeight;
+
+  const nudge = el.querySelector('#profileNudgeBtn');
+  if (nudge) {
+    nudge.addEventListener('click', () => {
+      renderTab('profile');
+    });
+  }
 }
 
 // ── WALMART SEARCH (via backend scraper) ─────────────────
@@ -622,11 +642,12 @@ function renderProfile(el) {
 
       <div class="profile-section">
         <div class="profile-section-label">FULFILLMENT PREFERENCE</div>
-        <div class="profile-box" style="flex-direction:column;gap:8px;">
-          <p style="margin:0;font-size:12px;color:#666;">How should items be added to your cart? If your preferred option isn't available, the other will be chosen.</p>
-          <div class="fulfillment-toggle">
-            <button class="fulfill-btn ${state.fulfillmentPreference === 'delivery' ? 'active' : ''}" data-val="delivery">🚚 Delivery</button>
-            <button class="fulfill-btn ${state.fulfillmentPreference === 'pickup' ? 'active' : ''}" data-val="pickup">🏪 Pickup</button>
+        <div class="profile-box" style="flex-direction:column; align-items:stretch; gap:10px;">
+          <div class="combo-sublabel" style="margin-bottom:2px;">How should items be added to your cart?</div>
+          <p style="margin:0 0 6px;font-size:11px;color:#9aada0;">If your preferred option isn't available, the other will be chosen.</p>
+          <div class="tag-row" style="margin-bottom:0;">
+            <button class="fulfill-pill ${state.fulfillmentPreference === 'delivery' ? 'active' : ''}" data-val="delivery">Delivery</button>
+            <button class="fulfill-pill ${state.fulfillmentPreference === 'pickup' ? 'active' : ''}" data-val="pickup">Pickup</button>
           </div>
         </div>
       </div>
@@ -643,15 +664,15 @@ function renderProfile(el) {
         </div>
       </div>
 
-      <button class="signout-btn">Sign out</button>
+      <button class="signout-btn" id="signOutBtn">Sign out</button>
     </div>
   `;
 
-  el.querySelectorAll('.fulfill-btn').forEach(btn => {
+  el.querySelectorAll('.fulfill-pill').forEach(btn => {
     btn.addEventListener('click', () => {
       state.fulfillmentPreference = btn.dataset.val;
       chrome.storage.local.set({ fulfillmentPreference: state.fulfillmentPreference });
-      el.querySelectorAll('.fulfill-btn').forEach(b => b.classList.remove('active'));
+      el.querySelectorAll('.fulfill-pill').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
     });
   });
@@ -671,6 +692,26 @@ function renderProfile(el) {
   el.querySelector('#profileIncrement').addEventListener('click', () => {
     state.householdSize++;
     el.querySelector('#profileHH').textContent = state.householdSize;
+  });
+
+  el.querySelector('#signOutBtn').addEventListener('click', () => {
+    chrome.storage.local.remove(['onboarded', 'fulfillmentPreference'], () => {
+      Object.assign(state, {
+        diet: { lifestyle: [], allergies: [], other: '' },
+        goals: [],
+        householdSize: 2,
+        weeklyBudget: 120,
+        dailyCalories: 1800,
+        profileDietTags: [],
+        profileGoalTags: [],
+        fulfillmentPreference: 'delivery',
+        chatMessages: [{ role: 'bot', text: "Hi! I'm Simplate, your nutrition assistant. Ask me anything about your cart or meal plan." }],
+        savedMeals: { Breakfast: [], Lunch: [], Dinner: [], Snacks: [] },
+        groceryItems: [],
+        currentTab: 'chat',
+      });
+      showStep('step-welcome');
+    });
   });
 
   const avatarEditBtn = el.querySelector('#avatarEditBtn');
@@ -815,6 +856,23 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('dietNextBtn').addEventListener('click', () => showStep('step-goals'));
   document.getElementById('goBackBtn').addEventListener('click', () => showStep('step-diet'));
   document.getElementById('finishBtn').addEventListener('click', () => {
+    // Harvest dietary restriction pills from onboarding step 1
+    const dietTags = [];
+    document.querySelectorAll('#step-diet .pill.selected').forEach(p => dietTags.push(p.textContent.trim()));
+    const dietOther = document.getElementById('dietOther')?.value.trim();
+    if (dietOther) dietTags.push(dietOther);
+    state.profileDietTags = dietTags;
+    state.diet.lifestyle = dietTags;
+
+    // Harvest health goal pills from onboarding step 2
+    const goalTags = [];
+    document.querySelectorAll('#step-goals .pill.selected').forEach(p => goalTags.push(p.textContent.trim()));
+    state.profileGoalTags = goalTags;
+    state.goals = goalTags;
+
+    // Harvest household size
+    state.householdSize = parseInt(document.getElementById('hhCount')?.textContent) || 2;
+
     chrome.storage.local.set({ onboarded: true });
     showStep('step-app');
     renderTab('chat');
