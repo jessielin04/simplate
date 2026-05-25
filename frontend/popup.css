@@ -1192,3 +1192,86 @@ body {
   font-size: 11px;
   color: #4a7c59;
 }
+/* ── Empty states (List + Meals tabs) ── */
+.tab-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: 60px 24px;
+  text-align: center;
+  color: #7a9a82;
+}
+.tab-empty-icon { font-size: 40px; margin-bottom: 12px; }
+.tab-empty-state p {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #3d6145;
+}
+.tab-empty-state span { font-size: 12px; color: #9aada0; }
+
+/* ── Day-with-no-meals message ── */
+.day-empty-msg {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: #9aada0;
+}
+
+/* ── Recipe action bar (chat) ── */
+.recipe-action-bar {
+  display: flex;
+  gap: 8px;
+  padding: 6px 12px 10px;
+}
+.recipe-action-btn {
+  flex: 1;
+  padding: 9px 6px;
+  border-radius: 10px;
+  border: none;
+  background: #4a7c59;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.recipe-action-btn:hover { opacity: 0.85; }
+.recipe-action-btn.secondary {
+  background: #e8f0ea;
+  color: #2a5c3a;
+  border: 1px solid #c8deca;
+}
+.recipe-action-btn.secondary:hover { background: #dceade; }
+
+/* ── Meal slot picker day row ── */
+.slot-day-row {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.slot-day-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid #d0e0d4;
+  background: #fff;
+  font-size: 11px;
+  color: #3d6145;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  min-width: 34px;
+}
+.slot-day-btn.selected {
+  background: #4a7c59;
+  color: #fff;
+  border-color: #4a7c59;
+}
+.slot-day-num { font-size: 13px; font-weight: 700; margin-top: 2px; }
+.slot-type-btn { font-weight: 600; }

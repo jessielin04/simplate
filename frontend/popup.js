@@ -13,25 +13,8 @@ const state = {
   fulfillmentPreference: 'delivery', // 'delivery' | 'pickup'
   currentTab: 'chat',
   currentDay: new Date().getDay(),
-  groceryItems: [
-    { name: 'Spinach', sub: 'Click to pick a product', status: 'pending', itemId: null },
-    { name: 'Brown rice', sub: 'Mahatma Jasmine Brown Rice, Thai Fragrant Whole Grain Rice, 2 lb Bag $3.22', status: 'selected', itemId: '123456' },
-    { name: 'Olive oil', sub: 'Click to pick a product', status: 'pending', itemId: null },
-    { name: 'Garlic', sub: 'Click to pick a product', status: 'pending', itemId: null },
-    { name: 'Chicken', sub: 'Perdue Fresh No Antibiotics Ever Thin Sliced Chicken Breasts, 0.85–1.6 lbs $6.54', status: 'selected', itemId: '789012' },
-  ],
-  meals: {
-    0: [
-      { type: 'BREAKFAST', name: 'Greek yogurt with berries', meta: '320 cal | 28g protein | $3.20', liked: true },
-      { type: 'LUNCH', name: 'Chicken spinach salad', meta: '480 cal | 30g protein | $5.00', liked: false },
-      { type: 'DINNER', name: 'Veggie stir fry with rice', meta: '610 cal | 25g protein | $6.50', liked: false },
-    ],
-    1: [
-      { type: 'BREAKFAST', name: 'Oatmeal with banana', meta: '280 cal | 10g protein | $1.50', liked: false },
-      { type: 'LUNCH', name: 'Turkey wrap', meta: '420 cal | 28g protein | $4.50', liked: false },
-      { type: 'DINNER', name: 'Salmon with veggies', meta: '520 cal | 38g protein | $8.00', liked: false },
-    ],
-  },
+  groceryItems: [],
+  meals: {},
   savedMeals: { Breakfast: [], Lunch: [], Dinner: [], Snacks: [] },
   savedSearch: '',
   savedFilter: 'All',
@@ -117,9 +100,15 @@ function renderChat(el) {
           Complete your profile
           <span>Add dietary restrictions &amp; health goals for better suggestions →</span>
         </div>` : ''}
-      <div class="chat-messages" id="chatMessages">${state.chatMessages.map(m => `
-        <div class="chat-bubble ${m.role}">${m.text.replace(/\n/g, '<br>')}</div>
-      `).join('')}</div>
+      <div class="chat-messages" id="chatMessages">${state.chatMessages.map((m, idx) => {
+        if (m.role === 'recipe-actions') {
+          return `<div class="recipe-action-bar" data-idx="${idx}">
+            <button class="recipe-action-btn" data-action="add-to-list" data-idx="${idx}">🛒 Add ingredients to List</button>
+            <button class="recipe-action-btn secondary" data-action="add-to-meals" data-idx="${idx}">📅 Save to Meals</button>
+          </div>`;
+        }
+        return `<div class="chat-bubble ${m.role}">${m.text.replace(/\n/g, '<br>')}</div>`;
+      }).join('')}</div>
       <div class="chat-input-row">
         <input class="chat-input" id="chatInput" placeholder="Ask about your cart..." />
         <button class="chat-send" id="chatSend">
@@ -157,12 +146,8 @@ function renderChat(el) {
 
       if (data.recipe && data.recipe.ingredients) {
         state.chatMessages.push({ role: 'bot', text: formatRecipe(data.recipe) });
-        state.groceryItems = data.recipe.ingredients.map(ing => ({
-          name: ing.name,
-          sub: 'Click to pick a product',
-          status: 'pending',
-          itemId: null
-        }));
+        state.lastRecipe = data.recipe;
+        state.chatMessages.push({ role: 'recipe-actions', recipe: data.recipe });
       } else {
         state.chatMessages.push({ role: 'bot', text: data.reply || data.error || 'No response received.' });
       }
@@ -177,6 +162,26 @@ function renderChat(el) {
   input.addEventListener('keydown', e => { if (e.key === 'Enter') sendMsg(); });
   msgs.scrollTop = msgs.scrollHeight;
 
+  el.querySelectorAll('.recipe-action-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.idx);
+      const recipe = state.chatMessages[idx]?.recipe;
+      if (!recipe) return;
+
+      if (btn.dataset.action === 'add-to-list') {
+        state.groceryItems = recipe.ingredients.map(ing => ({
+          name: ing.name,
+          sub: 'Click to pick a product',
+          status: 'pending',
+          itemId: null
+        }));
+        renderTab('list');
+      } else if (btn.dataset.action === 'add-to-meals') {
+        showMealSlotPicker(recipe);
+      }
+    });
+  });
+
   const nudge = el.querySelector('#profileNudgeBtn');
   if (nudge) nudge.addEventListener('click', () => renderTab('profile'));
 }
@@ -190,6 +195,18 @@ async function searchWalmart(query, maxResults = 5) {
 
 // ── GROCERY (our backend version) ────────────────────────
 function renderGrocery(el) {
+  if (state.groceryItems.length === 0) {
+    el.innerHTML = `
+      <div class="grocery-wrap">
+        <div class="tab-empty-state">
+          <div class="tab-empty-icon">🛒</div>
+          <p>Your list is empty</p>
+          <span>Ask the assistant for a recipe to build your list.</span>
+        </div>
+      </div>
+    `;
+    return;
+  }
   const pending = state.groceryItems.filter(i => i.status === 'pending').length;
   el.innerHTML = `
     <div class="grocery-wrap">
@@ -335,7 +352,22 @@ function showProductPicker(ingredientName, products, itemIndex, groceryEl) {
 // ── MEALS (their version with category picker) ───────────
 function renderMeals(el) {
   const today = state.currentDay;
-  const meals = state.meals[today] || state.meals[0];
+  const hasMeals = Object.values(state.meals).some(arr => arr && arr.length > 0);
+
+  if (!hasMeals) {
+    el.innerHTML = `
+      <div class="meals-wrap">
+        <div class="tab-empty-state">
+          <div class="tab-empty-icon">📅</div>
+          <p>No meals planned yet</p>
+          <span>Save a meal from chat to see it here.</span>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  const meals = state.meals[today] || [];
 
   el.innerHTML = `
     <div class="meals-wrap">
@@ -356,7 +388,9 @@ function renderMeals(el) {
         })()}
       </div>
       <div class="meal-cards">
-        ${meals.map((m, mi) => `
+        ${meals.length === 0
+          ? `<p class="day-empty-msg">No meals saved for this day. Ask the assistant for a recipe!</p>`
+          : meals.map((m, mi) => `
           <div class="meal-card">
             <div class="meal-card-info">
               <div class="meal-type">${m.type}</div>
@@ -369,9 +403,10 @@ function renderMeals(el) {
           </div>
         `).join('')}
       </div>
+      ${meals.length > 0 ? `
       <div class="regen-bar">
-        <button class="btn-full">Regenerate with AI ✦</button>
-      </div>
+        <button class="btn-full" id="regenBtn">Regenerate with AI ✦</button>
+      </div>` : ''}
     </div>
   `;
 
@@ -386,7 +421,7 @@ function renderMeals(el) {
     btn.addEventListener('click', () => {
       const d = parseInt(btn.dataset.day);
       const mi = parseInt(btn.dataset.meal);
-      const dayMeals = state.meals[d] || state.meals[0];
+      const dayMeals = state.meals[d] || [];
       const meal = dayMeals[mi];
 
       if (!meal.liked) {
@@ -419,6 +454,36 @@ function renderMeals(el) {
       }
     });
   });
+
+  const regenBtn = el.querySelector('#regenBtn');
+  if (regenBtn) {
+    regenBtn.addEventListener('click', async () => {
+      const today = state.currentDay;
+      regenBtn.disabled = true;
+      regenBtn.textContent = 'Generating…';
+      try {
+        const res = await fetch('http://localhost:5000/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [{ role: 'user', content: `Suggest a new meal plan for ${days[today]}. Give me one recipe.` }],
+            dietary_restrictions: state.profileDietTags,
+            health_goals: state.profileGoalTags
+          })
+        });
+        const data = await res.json();
+        if (data.recipe && data.recipe.ingredients) {
+          showMealSlotPicker(data.recipe);
+        } else {
+          regenBtn.textContent = 'Regenerate with AI ✦';
+          regenBtn.disabled = false;
+        }
+      } catch (e) {
+        regenBtn.textContent = 'Error — try again';
+        regenBtn.disabled = false;
+      }
+    });
+  }
 }
 
 // ── SAVED (their version) ────────────────────────────────
@@ -531,6 +596,91 @@ function renderSaved(el) {
     });
   });
 }
+
+function showMealSlotPicker(recipe) {
+  document.getElementById('mealSlotModal')?.remove();
+  const mealTypes = ['BREAKFAST', 'LUNCH', 'DINNER'];
+  let selectedDay = state.currentDay;
+  let selectedType = null;
+
+  const now = new Date();
+  const todayIdx = now.getDay();
+  const sunday = new Date(now);
+  sunday.setDate(now.getDate() - todayIdx);
+
+  const modal = document.createElement('div');
+  modal.id = 'mealSlotModal';
+  modal.className = 'cat-modal-overlay';
+  modal.innerHTML = `
+    <div class="cat-modal">
+      <div class="cat-modal-title">Add to Meals</div>
+      <div class="cat-modal-meal">${recipe.recipe_name}</div>
+      <p class="cat-modal-hint">Pick a day</p>
+      <div class="slot-day-row">
+        ${days.map((d, i) => {
+          const date = new Date(sunday);
+          date.setDate(sunday.getDate() + i);
+          return `<button class="slot-day-btn ${i === selectedDay ? 'selected' : ''}" data-day="${i}">
+            <span>${d}</span><span class="slot-day-num">${date.getDate()}</span>
+          </button>`;
+        }).join('')}
+      </div>
+      <p class="cat-modal-hint" style="margin-top:12px">Pick a meal slot</p>
+      <div class="cat-modal-options">
+        ${mealTypes.map(t => `
+          <button class="cat-option-btn slot-type-btn" data-type="${t}">
+            <span class="cat-option-icon">${{BREAKFAST:'🌅',LUNCH:'☀️',DINNER:'🌙'}[t]}</span>
+            <span>${t.charAt(0) + t.slice(1).toLowerCase()}</span>
+            <span class="cat-check-icon">✓</span>
+          </button>`).join('')}
+      </div>
+      <button class="cat-modal-save" id="mealSlotSave" disabled>Save</button>
+      <button class="cat-modal-cancel" id="mealSlotCancel">Cancel</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  modal.querySelectorAll('.slot-day-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      selectedDay = parseInt(btn.dataset.day);
+      modal.querySelectorAll('.slot-day-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+    });
+  });
+
+  const saveBtn = modal.querySelector('#mealSlotSave');
+  modal.querySelectorAll('.slot-type-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      selectedType = btn.dataset.type;
+      modal.querySelectorAll('.slot-type-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save meal';
+    });
+  });
+
+  saveBtn.addEventListener('click', () => {
+    if (!selectedType) return;
+    if (!state.meals[selectedDay]) state.meals[selectedDay] = [];
+    // Remove existing slot of same type if present
+    state.meals[selectedDay] = state.meals[selectedDay].filter(m => m.type !== selectedType);
+    state.meals[selectedDay].push({
+      type: selectedType,
+      name: recipe.recipe_name,
+      meta: `${recipe.servings} servings`,
+      liked: false,
+      ingredients: recipe.ingredients,
+      instructions: recipe.instructions,
+      description: recipe.description
+    });
+    modal.remove();
+    renderTab('meals');
+  });
+
+  modal.querySelector('#mealSlotCancel').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+}
+
 
 function showCategoryPicker(meal, onPick) {
   document.getElementById('catPickerModal')?.remove();

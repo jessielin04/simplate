@@ -24,9 +24,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 async function addItemsSequentially(urls, fulfillment) {
   let added = 0;
 
-  // Keep tab active so Walmart doesn't throttle JS execution in the background.
-  // This is the most common reason ATC silently fails — hidden tabs defer rendering.
-  const tab = await chrome.tabs.create({ url: urls[0], active: true });
+  // Open a dedicated minimized window for ATC. The tab is "active" within
+  // that window (so Walmart runs JS at full speed) but the window is minimized
+  // so the user never gets pulled away from what they were doing.
+  // We close the window when the loop finishes and open the cart instead.
+  const atcWindow = await chrome.windows.create({
+    url: urls[0],
+    type: 'normal',
+    state: 'minimized',
+  });
+  const tab = atcWindow.tabs[0];
 
   for (let i = 0; i < urls.length; i++) {
     if (i > 0) {
@@ -36,7 +43,6 @@ async function addItemsSequentially(urls, fulfillment) {
     await waitForTabLoad(tab.id);
 
     // Wait for Walmart's React app to hydrate and render the ATC button.
-    // 3.5s is more reliable than 2.5s, especially on first product load.
     await sleep(3500);
 
     // Make sure the content script is actually ready before messaging.
@@ -45,14 +51,13 @@ async function addItemsSequentially(urls, fulfillment) {
     const success = await sendATCMessage(tab.id, fulfillment);
     if (success) {
       added++;
-      // Give the fulfillment modal time to appear and be dismissed before moving on.
       await sleep(3000);
     } else {
       await sleep(1500);
     }
   }
 
-  try { await chrome.tabs.remove(tab.id); } catch (_) {}
+  try { await chrome.windows.remove(atcWindow.id); } catch (_) {}
   return added;
 }
 
@@ -66,7 +71,7 @@ function waitForContentScript(tabId, timeoutMs = 8000) {
           if (Date.now() - start < timeoutMs) {
             setTimeout(attempt, 400);
           } else {
-            resolve(false); // timed out, proceed anyway
+            resolve(false);
           }
         } else {
           resolve(true);
@@ -82,7 +87,6 @@ async function sendATCMessage(tabId, fulfillment) {
     const response = await chrome.tabs.sendMessage(tabId, { type: 'simplate_atc', fulfillment });
     return response?.success === true;
   } catch (e) {
-    // One retry after a short delay
     await sleep(1500);
     try {
       const response = await chrome.tabs.sendMessage(tabId, { type: 'simplate_atc', fulfillment });
