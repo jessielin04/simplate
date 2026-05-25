@@ -2,7 +2,7 @@
 const state = {
   diet: { lifestyle: [], allergies: [], other: '' },
   goals: [],
-  householdSize: 2,
+  householdSize: 1,
   weeklyBudget: 120,
   dailyCalories: 1800,
   profileDietTags: ['Gluten-free'],
@@ -12,7 +12,7 @@ const state = {
   profileEditing: false,
   fulfillmentPreference: 'delivery', // 'delivery' | 'pickup'
   currentTab: 'chat',
-  currentDay: 0,
+  currentDay: new Date().getDay(),
   groceryItems: [
     { name: 'Spinach', sub: 'Click to pick a product', status: 'pending', itemId: null },
     { name: 'Brown rice', sub: 'Mahatma Jasmine Brown Rice, Thai Fragrant Whole Grain Rice, 2 lb Bag $3.22', status: 'selected', itemId: '123456' },
@@ -40,7 +40,7 @@ const state = {
   ]
 };
 
-const days = ['Sun', 'Mon', 'Tues', 'Wed', 'Thurs', 'Fri', 'Sat'];
+const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 // ── Step navigation ─────────────────────────────────────
 function showStep(id) {
@@ -178,11 +178,7 @@ function renderChat(el) {
   msgs.scrollTop = msgs.scrollHeight;
 
   const nudge = el.querySelector('#profileNudgeBtn');
-  if (nudge) {
-    nudge.addEventListener('click', () => {
-      renderTab('profile');
-    });
-  }
+  if (nudge) nudge.addEventListener('click', () => renderTab('profile'));
 }
 
 // ── WALMART SEARCH (via backend scraper) ─────────────────
@@ -344,12 +340,20 @@ function renderMeals(el) {
   el.innerHTML = `
     <div class="meals-wrap">
       <div class="day-tabs">
-        ${days.map((d, i) => `
-          <button class="day-tab ${i === today ? 'active' : ''}" data-day="${i}">
+        ${(() => {
+          const now = new Date();
+          const todayIdx = now.getDay();
+          const sunday = new Date(now);
+          sunday.setDate(now.getDate() - todayIdx);
+          return days.map((d, i) => {
+            const date = new Date(sunday);
+            date.setDate(sunday.getDate() + i);
+            return `<button class="day-tab ${i === today ? 'active' : ''}" data-day="${i}">
             <span>${d}</span>
-            <span class="day-num">${i + 1}</span>
-          </button>
-        `).join('')}
+            <span class="day-num">${date.getDate()}</span>
+          </button>`;
+          }).join('');
+        })()}
       </div>
       <div class="meal-cards">
         ${meals.map((m, mi) => `
@@ -597,7 +601,7 @@ function renderProfile(el) {
         <div class="profile-section-label">WEEKLY TARGETS</div>
         <div class="profile-box" style="flex-direction:column;gap:10px;">
           <div class="target-row">
-            <span>Budget</span>
+            <span class="target-label">Budget</span>
             <div class="target-input-wrap">
               <span class="target-prefix">$</span>
               <input class="target-input" id="budgetInput" type="number" min="0" value="${state.weeklyBudget}" />
@@ -605,7 +609,7 @@ function renderProfile(el) {
             </div>
           </div>
           <div class="target-row">
-            <span>Calories</span>
+            <span class="target-label">Calories</span>
             <div class="target-input-wrap">
               <input class="target-input" id="caloriesInput" type="number" min="0" value="${state.dailyCalories}" />
               <span class="target-suffix">/day</span>
@@ -642,10 +646,10 @@ function renderProfile(el) {
 
       <div class="profile-section">
         <div class="profile-section-label">FULFILLMENT PREFERENCE</div>
-        <div class="profile-box" style="flex-direction:column; align-items:stretch; gap:10px;">
+        <div class="profile-box" style="flex-direction:column; align-items:stretch; gap:6px;">
           <div class="combo-sublabel" style="margin-bottom:2px;">How should items be added to your cart?</div>
-          <p style="margin:0 0 6px;font-size:11px;color:#9aada0;">If your preferred option isn't available, the other will be chosen.</p>
-          <div class="tag-row" style="margin-bottom:0;">
+          <p style="margin:0 0 4px;font-size:11px;color:#9aada0;">If your preferred option isn't available, the other will be chosen.</p>
+          <div class="tag-row">
             <button class="fulfill-pill ${state.fulfillmentPreference === 'delivery' ? 'active' : ''}" data-val="delivery">Delivery</button>
             <button class="fulfill-pill ${state.fulfillmentPreference === 'pickup' ? 'active' : ''}" data-val="pickup">Pickup</button>
           </div>
@@ -699,7 +703,7 @@ function renderProfile(el) {
       Object.assign(state, {
         diet: { lifestyle: [], allergies: [], other: '' },
         goals: [],
-        householdSize: 2,
+        householdSize: 1,
         weeklyBudget: 120,
         dailyCalories: 1800,
         profileDietTags: [],
@@ -856,7 +860,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('dietNextBtn').addEventListener('click', () => showStep('step-goals'));
   document.getElementById('goBackBtn').addEventListener('click', () => showStep('step-diet'));
   document.getElementById('finishBtn').addEventListener('click', () => {
-    // Harvest dietary restriction pills from onboarding step 1
     const dietTags = [];
     document.querySelectorAll('#step-diet .pill.selected').forEach(p => dietTags.push(p.textContent.trim()));
     const dietOther = document.getElementById('dietOther')?.value.trim();
@@ -864,14 +867,12 @@ document.addEventListener('DOMContentLoaded', () => {
     state.profileDietTags = dietTags;
     state.diet.lifestyle = dietTags;
 
-    // Harvest health goal pills from onboarding step 2
     const goalTags = [];
     document.querySelectorAll('#step-goals .pill.selected').forEach(p => goalTags.push(p.textContent.trim()));
     state.profileGoalTags = goalTags;
     state.goals = goalTags;
 
-    // Harvest household size
-    state.householdSize = parseInt(document.getElementById('hhCount')?.textContent) || 2;
+    state.householdSize = parseInt(document.getElementById('hhCount')?.textContent) || 1;
 
     chrome.storage.local.set({ onboarded: true });
     showStep('step-app');

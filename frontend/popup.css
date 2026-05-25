@@ -1,3 +1,10 @@
+@font-face {
+  font-family: 'Righteous';
+  src: url('fonts/Righteous-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
@@ -77,7 +84,7 @@ body {
   flex-shrink: 0;
 }
 
-.logo-sm { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 16px; color: #fff; }
+.logo-sm { display: flex; align-items: center; gap: 6px; font-weight: 400; font-size: 16px; color: #fff; font-family: 'Righteous', sans-serif; }
 .logo-sm span { font-size: 18px; }
 .step-count { color: rgba(255,255,255,0.75); font-size: 13px; }
 
@@ -351,30 +358,10 @@ body {
 ══════════════════════════════ */
 .meals-wrap { display: flex; flex-direction: column; height: 100%; }
 
-.day-tabs {
-  display: flex;
-  gap: 4px;
-  padding: 10px 12px 6px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  background: #f7f7f5;
-}
+.day-tabs { display: flex; justify-content: space-between; padding: 10px 8px 6px; overflow-x: auto; scrollbar-width: none; }
 .day-tabs::-webkit-scrollbar { display: none; }
 
-.day-tab {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 5px 8px;
-  border-radius: 8px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  min-width: 36px;
-  color: #7a8f82;
-  font-size: 11px;
-  gap: 2px;
-}
+.day-tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; background: none; border: none; cursor: pointer; padding: 6px 2px; border-radius: 8px; min-width: 0; }
 .day-tab .day-num { font-size: 14px; font-weight: 700; }
 .day-tab.active { background: #d5825f; color: #fff; }
 
@@ -429,7 +416,8 @@ body {
 .hh-stepper { display: flex; align-items: center; gap: 8px; }
 .hh-label { font-size: 13px; color: #1a2e22; margin-right: 4px; }
 
-.target-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #1a2e22; padding: 4px 0; }
+.target-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; }
+.target-label { font-size: 11px; font-weight: 700; color: #4a7c59; text-transform: uppercase; letter-spacing: 0.06em; }
 .target-val { color: #4a7c59; font-weight: 600; }
 
 .signout-btn { width: 100%; background: none; border: none; color: #9aada0; font-size: 13px; padding: 10px; cursor: pointer; margin: 8px 0; text-align: center; }
@@ -484,7 +472,7 @@ body {
   font-size: 11px;
   font-weight: 700;
   color: #4a7c59;
-  margin-bottom: 3px;
+  margin-bottom: 6px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -522,29 +510,6 @@ body {
 }
 
 .tag-remove:hover { color: #fff; }
-/* ── Fulfillment preference pills ── */
-.fulfill-pill {
-  background: none;
-  border: 1.5px solid #c8d8cc;
-  border-radius: 20px;
-  padding: 5px 14px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #7a8f82;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-
-.fulfill-pill.active {
-  background: #4a7c59;
-  color: #fff;
-  border-color: #4a7c59;
-}
-
-.fulfill-pill:hover:not(.active) {
-  border-color: #4a7c59;
-  color: #4a7c59;
-}
 
 .autocomplete-wrap {
   position: relative;
@@ -1187,6 +1152,28 @@ body {
   object-fit: contain;
   vertical-align: middle;
 }
+/* ── Fulfillment preference pills ── */
+.fulfill-pill {
+  background: none;
+  border: 1.5px solid #c8d8cc;
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #7a8f82;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.fulfill-pill.active {
+  background: #4a7c59;
+  color: #fff;
+  border-color: #4a7c59;
+}
+.fulfill-pill:hover:not(.active) {
+  border-color: #4a7c59;
+  color: #4a7c59;
+}
+
 /* ── Profile nudge banner (chat tab) ── */
 .profile-nudge-banner {
   background: #e8f0ea;
@@ -1198,11 +1185,7 @@ body {
   border-bottom: 1px solid #d0e0d4;
   transition: background 0.15s;
 }
-
-.profile-nudge-banner:hover {
-  background: #dceade;
-}
-
+.profile-nudge-banner:hover { background: #dceade; }
 .profile-nudge-banner span {
   display: block;
   font-weight: 400;
