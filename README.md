@@ -27,6 +27,7 @@ pip install flask flask-cors groq httpx python-dotenv
 ```
 
 > **Mac:** use `source venv/bin/activate` instead of `venv\Scripts\activate`
+> **Mac:** use `python3 -m venv venvy` instead of `python -m venv venv`
 
 Create a `.env` file in the `backend/` folder:
 
@@ -57,7 +58,7 @@ python main.py
 ```
 
 > **Mac:** use `source venv/bin/activate` instead of `venv\Scripts\activate`
-> > **Mac:** use `python3 main.py` instead of `python main.py`
+> **Mac:** use `python3 main.py` instead of `python main.py`
 
 Then click the Simplate icon in Chrome to open the side panel.
 
