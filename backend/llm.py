@@ -17,6 +17,7 @@ Rules:
   "recipe_name": "string",
   "description": "string (1-2 sentences)",
   "servings": number,
+  "calories_per_serving": number,
   "ingredients": [
     { "name": "string", "quantity": "string (e.g. '2 cups')" }
   ],
