@@ -1,18 +1,17 @@
-// Opens side panel on icon click
+//Open side panel when extension icon is clicked
 chrome.action.onClicked.addListener((tab) => {
   chrome.sidePanel.open({ windowId: tab.windowId });
 });
-
-// ── ATC orchestration ────────────────────────────────────
+//ACT Process: is msg a cart request? 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type !== 'simplate_start_atc') return;
-
+  //walmart product URLs to add 
   const { urls, fulfillment = 'delivery', itemNames = [] } = msg;
   if (!urls || urls.length === 0) {
     sendResponse({ done: true, added: 0, failed: [] });
     return true;
   }
-
+  //cart process, open cart tab when done 
   addItemsSequentially(urls, itemNames, fulfillment).then(({ added, failed }) => {
     openOrReloadCart();
     sendResponse({ done: true, added, failed });
@@ -20,11 +19,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   return true;
 });
-
+//products are added one aat a time (due to Walmart's cart only being able to handle one product at a time reliably)
 async function addItemsSequentially(urls, itemNames, fulfillment) {
   let added = 0;
   const failed = []; // { name, reason }
-
+  //opens real brower window minimized bcs Walmart throttles JS in hidden/inactive tabs
   let atcWindow;
   try {
     atcWindow = await chrome.windows.create({ url: urls[0], type: 'normal', state: 'minimized' });
@@ -33,7 +32,7 @@ async function addItemsSequentially(urls, itemNames, fulfillment) {
     return { added: 0, failed: itemNames.map(n => ({ name: n, reason: 'Could not open window' })) };
   }
   const tab = atcWindow.tabs[0];
-
+  //for each product: nav window to product URL, wait to fully load, wait extra for Walmart to render ): confirm content.js is ready, then add to cart
   for (let i = 0; i < urls.length; i++) {
     if (i > 0) {
       await chrome.tabs.update(tab.id, { url: urls[i] });
