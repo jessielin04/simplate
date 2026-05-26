@@ -590,32 +590,52 @@ body {
   border-radius: 50%;
 }
 
-.avatar-edit-btn {
+.pixabot-avatar {
+  border-radius: 50%;
+  background: #e0e8e3;
+  overflow: hidden;
+}
+
+.pixabot-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+  border-radius: 50%;
+}
+
+.avatar-shuffle-btn {
   position: absolute;
   bottom: -2px;
   right: -2px;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   background: #fff;
   border-radius: 50%;
   border: 1.5px solid #c8d8cc;
   display: none;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13px;
   color: #4a7c59;
   cursor: pointer;
   box-shadow: 0 1px 4px rgba(0,0,0,0.15);
   line-height: 1;
+  padding: 0;
+  transition: transform 0.2s;
 }
 
-.avatar-wrap:hover .avatar-edit-btn {
+.avatar-wrap:hover .avatar-shuffle-btn {
   display: flex;
 }
 
+.avatar-shuffle-btn:hover {
+  transform: rotate(180deg);
+  background: #e8f0ea;
+}
+
 .avatar-wrap:hover .avatar {
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
 .profile-name-wrap {

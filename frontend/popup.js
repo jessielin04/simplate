@@ -8,7 +8,7 @@ const state = {
   profileDietTags: [],
   profileGoalTags: [],
   profileName: '',
-  profilePhoto: null,
+  pixabotId: null,
   profileEditing: false,
   fulfillmentPreference: 'delivery', // 'delivery' | 'pickup'
   fulfillmentSet: false,
@@ -97,14 +97,34 @@ function formatRecipe(recipe) {
   return `🍽️ ${recipe.recipe_name}${calories}\n${recipe.description}\n\nIngredients:\n${ingredients}${instructions}`;
 }
 
+// ── Pixabot avatar helpers ──────────────────────────────
+function randomPixabotId() {
+  // PIXABOT_IDS is loaded from assets/pfp-index.js
+  return PIXABOT_IDS[Math.floor(Math.random() * PIXABOT_IDS.length)];
+}
+
+function pixabotUrl(id) {
+  return `assets/pfp/${id}.png`;
+}
+
+function loadPixabotImage(id, imgEl) {
+  if (!imgEl) return;
+  imgEl.src = pixabotUrl(id);
+}
+
+function ensurePixabotId() {
+  if (!state.pixabotId) {
+    state.pixabotId = randomPixabotId();
+    chrome.storage.local.set({ pixabotId: state.pixabotId });
+  }
+}
+
 // ── CHAT (our backend version) ───────────────────────────
 function renderChat(el) {
   const missingName = !state.profileName;
-  const missingPhoto = !state.profilePhoto;
   const missingFulfillment = !state.fulfillmentSet;
   const nudgeItems = [
     missingName && 'name',
-    missingPhoto && 'photo',
     missingFulfillment && 'fulfillment',
   ].filter(Boolean);
   const showNudge = nudgeItems.length > 0 && !state.nudgeDismissed;
@@ -871,15 +891,15 @@ function showCategoryPicker(meal, onPick) {
 
 // ── PROFILE (their version) ──────────────────────────────
 function renderProfile(el) {
+  ensurePixabotId();
   el.innerHTML = `
     <div class="profile-wrap">
       <div class="profile-avatar-row">
         <div class="avatar-wrap" id="avatarWrap">
-          <div class="avatar" id="avatarCircle">
-            ${state.profilePhoto ? `<img src="${state.profilePhoto}" class="avatar-img" />` : ''}
+          <div class="avatar pixabot-avatar" id="avatarCircle">
+            <img src="" class="avatar-img pixabot-img" id="pixabotImg" alt="Your avatar" />
           </div>
-          <div class="avatar-edit-btn" id="avatarEditBtn">+</div>
-          <input type="file" id="avatarFileInput" accept="image/*" style="display:none" />
+          <button class="avatar-shuffle-btn" id="avatarShuffleBtn" title="Shuffle avatar">↻</button>
         </div>
         <div class="profile-name-wrap">
           <div class="profile-name ${!state.profileName ? 'profile-name--placeholder' : ''}" id="profileNameDisplay" ${state.profileEditing ? 'style="display:none"' : ''}>${state.profileName || 'Add name'}</div>
@@ -995,7 +1015,7 @@ function renderProfile(el) {
   });
 
   el.querySelector('#signOutBtn').addEventListener('click', () => {
-    chrome.storage.local.remove(['onboarded', 'fulfillmentPreference', 'fulfillmentSet', 'profileName', 'profilePhoto', 'profileDietTags', 'profileGoalTags', 'householdSize', 'weeklyBudget', 'dailyCalories', 'nudgeDismissed'], () => {
+    chrome.storage.local.remove(['onboarded', 'fulfillmentPreference', 'fulfillmentSet', 'profileName', 'pixabotId', 'profileDietTags', 'profileGoalTags', 'householdSize', 'weeklyBudget', 'dailyCalories', 'nudgeDismissed'], () => {
       Object.assign(state, {
         diet: { lifestyle: [], allergies: [], other: '' },
         goals: [],
@@ -1004,6 +1024,7 @@ function renderProfile(el) {
         dailyCalories: 1800,
         profileDietTags: [],
         profileGoalTags: [],
+        pixabotId: null,
         fulfillmentPreference: 'delivery',
         chatMessages: [{ role: 'bot', text: "Hi! I'm Simplate, your nutrition assistant. Ask me anything about your cart or meal plan." }],
         savedMeals: { Breakfast: [], Lunch: [], Dinner: [], Snacks: [] },
@@ -1014,20 +1035,16 @@ function renderProfile(el) {
     });
   });
 
-  const avatarEditBtn = el.querySelector('#avatarEditBtn');
-  const avatarFileInput = el.querySelector('#avatarFileInput');
-  const avatarCircle = el.querySelector('#avatarCircle');
-  avatarEditBtn.addEventListener('click', () => avatarFileInput.click());
-  avatarFileInput.addEventListener('change', () => {
-    const file = avatarFileInput.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = e => {
-      state.profilePhoto = e.target.result;
-      avatarCircle.innerHTML = `<img src="${state.profilePhoto}" class="avatar-img" />`;
-      chrome.storage.local.set({ profilePhoto: state.profilePhoto });
-    };
-    reader.readAsDataURL(file);
+  const shuffleBtn = el.querySelector('#avatarShuffleBtn');
+  const pixabotImg = el.querySelector('#pixabotImg');
+
+  // Load current avatar from local assets
+  loadPixabotImage(state.pixabotId, pixabotImg);
+
+  shuffleBtn.addEventListener('click', () => {
+    state.pixabotId = randomPixabotId();
+    chrome.storage.local.set({ pixabotId: state.pixabotId });
+    loadPixabotImage(state.pixabotId, pixabotImg);
   });
 
   const nameDisplay = el.querySelector('#profileNameDisplay');
@@ -1189,12 +1206,12 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   chrome.storage.local.get([
-    'onboarded', 'fulfillmentPreference', 'fulfillmentSet', 'profileName', 'profilePhoto',
+    'onboarded', 'fulfillmentPreference', 'fulfillmentSet', 'profileName', 'pixabotId',
     'profileDietTags', 'profileGoalTags', 'householdSize', 'weeklyBudget', 'dailyCalories', 'nudgeDismissed'
   ], result => {
     if (result.fulfillmentPreference) state.fulfillmentPreference = result.fulfillmentPreference;
     if (result.profileName)     state.profileName     = result.profileName;
-    if (result.profilePhoto)    state.profilePhoto    = result.profilePhoto;
+    if (result.pixabotId)       state.pixabotId       = result.pixabotId;
     if (result.profileDietTags) state.profileDietTags = result.profileDietTags;
     if (result.profileGoalTags) state.profileGoalTags = result.profileGoalTags;
     if (result.householdSize)   state.householdSize   = result.householdSize;
@@ -1203,6 +1220,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (result.fulfillmentSet)  state.fulfillmentSet  = result.fulfillmentSet;
     if (result.nudgeDismissed)  state.nudgeDismissed  = result.nudgeDismissed;
     if (result.onboarded) {
+      ensurePixabotId();
       showStep('step-app');
       renderTab('chat');
     }
