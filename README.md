@@ -53,7 +53,7 @@ Every time you want to use Simplate, start the backend first:
 ```bash
 cd backend
 venv\Scripts\activate
-python main.py
+python3 main.py
 ```
 
 > **Mac:** use `source venv/bin/activate` instead of `venv\Scripts\activate`
