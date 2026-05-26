@@ -53,10 +53,11 @@ Every time you want to use Simplate, start the backend first:
 ```bash
 cd backend
 venv\Scripts\activate
-python3 main.py
+python main.py
 ```
 
 > **Mac:** use `source venv/bin/activate` instead of `venv\Scripts\activate`
+> > **Mac:** use `python3 main.py` instead of `python main.py`
 
 Then click the Simplate icon in Chrome to open the side panel.
 
