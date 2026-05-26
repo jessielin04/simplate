@@ -930,7 +930,7 @@ function renderProfile(el) {
       </div>
 
       <div class="profile-section">
-        <div class="profile-section-label">DIETARY RESTRICTIONS & HEALTH GOALS</div>
+        <div class="profile-section-label">LIFESTYLE</div>
         <div class="profile-box" style="flex-direction:column; align-items:stretch; gap:10px;">
           <div>
             <div class="combo-sublabel">Dietary Restrictions</div>
