@@ -1329,3 +1329,49 @@ body {
 }
 .try-different-btn:hover { text-decoration: underline; }
 .unavailable-row { opacity: 0.85; }
+
+/* ── Meal card expand ── */
+.meal-card-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.meal-expand-btn {
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: #7a9a82;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+.meal-expand-btn:hover { color: #4a7c59; }
+.meal-detail {
+  background: #f5f9f6;
+  border: 1px solid #e0ece3;
+  border-radius: 10px;
+  margin: -8px 0 8px;
+  padding: 12px 14px;
+  font-size: 12px;
+  color: #3d5c45;
+}
+.meal-detail-desc {
+  margin: 0 0 10px;
+  font-style: italic;
+  color: #5a7a62;
+}
+.meal-detail-section {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #4a7c59;
+  text-transform: uppercase;
+  margin: 10px 0 4px;
+}
+.meal-detail-list {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.7;
+}

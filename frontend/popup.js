@@ -87,7 +87,12 @@ function formatRecipe(recipe) {
   const ingredients = recipe.ingredients
     .map(i => `• ${i.quantity} ${i.name}`)
     .join('\n');
-  return `🍽️ ${recipe.recipe_name}\n${recipe.description}\n\nIngredients:\n${ingredients}`;
+  const calories = recipe.calories_per_serving
+    ? `\n🔥 ~${recipe.calories_per_serving} cal/serving` : '';
+  const instructions = recipe.instructions && recipe.instructions.length
+    ? '\n\nInstructions:\n' + recipe.instructions.map((s, i) => `${i + 1}. ${s}`).join('\n')
+    : '';
+  return `🍽️ ${recipe.recipe_name}${calories}\n${recipe.description}\n\nIngredients:\n${ingredients}${instructions}`;
 }
 
 // ── CHAT (our backend version) ───────────────────────────
@@ -134,10 +139,12 @@ function renderChat(el) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: state.chatMessages.map(m => ({
-            role: m.role === 'bot' ? 'assistant' : 'user',
-            content: m.text
-          })),
+          messages: state.chatMessages
+            .filter(m => m.role !== 'recipe-actions' && m.text)
+            .map(m => ({
+              role: m.role === 'bot' ? 'assistant' : 'user',
+              content: m.text
+            })),
           dietary_restrictions: state.diet.lifestyle.concat(state.diet.allergies),
           health_goals: state.goals
         })
@@ -451,15 +458,31 @@ function renderMeals(el) {
         ${meals.length === 0
           ? `<p class="day-empty-msg">No meals saved for this day. Ask the assistant for a recipe!</p>`
           : meals.map((m, mi) => `
-          <div class="meal-card">
+          <div class="meal-card" data-meal-index="${mi}">
             <div class="meal-card-info">
               <div class="meal-type">${m.type}</div>
               <div class="meal-name">${m.name}</div>
-              <div class="meal-meta">${m.meta}</div>
+              <div class="meal-meta">${m.calories_per_serving ? `🔥 ~${m.calories_per_serving} cal/serving` : m.meta}</div>
             </div>
-            <button class="heart-btn ${m.liked ? 'liked' : ''}" data-day="${today}" data-meal="${mi}">
-              ${m.liked ? '♥' : '♡'}
-            </button>
+            <div class="meal-card-actions">
+              <button class="meal-expand-btn" data-day="${today}" data-meal="${mi}">▾</button>
+              <button class="heart-btn ${m.liked ? 'liked' : ''}" data-day="${today}" data-meal="${mi}">
+                ${m.liked ? '♥' : '♡'}
+              </button>
+            </div>
+          </div>
+          <div class="meal-detail" id="meal-detail-${today}-${mi}" style="display:none">
+            ${m.description ? `<p class="meal-detail-desc">${m.description}</p>` : ''}
+            ${m.ingredients ? `
+              <div class="meal-detail-section">Ingredients</div>
+              <ul class="meal-detail-list">
+                ${m.ingredients.map(ing => `<li>${ing.quantity} ${ing.name}</li>`).join('')}
+              </ul>` : ''}
+            ${m.instructions ? `
+              <div class="meal-detail-section">Instructions</div>
+              <ol class="meal-detail-list">
+                ${m.instructions.map(step => `<li>${step}</li>`).join('')}
+              </ol>` : ''}
           </div>
         `).join('')}
       </div>
@@ -474,6 +497,18 @@ function renderMeals(el) {
     btn.addEventListener('click', () => {
       state.currentDay = parseInt(btn.dataset.day);
       renderMeals(el);
+    });
+  });
+
+  el.querySelectorAll('.meal-expand-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const d = btn.dataset.day;
+      const mi = btn.dataset.meal;
+      const detail = el.querySelector(`#meal-detail-${d}-${mi}`);
+      if (!detail) return;
+      const open = detail.style.display !== 'none';
+      detail.style.display = open ? 'none' : 'block';
+      btn.textContent = open ? '▾' : '▴';
     });
   });
 
@@ -728,6 +763,7 @@ function showMealSlotPicker(recipe) {
       type: selectedType,
       name: recipe.recipe_name,
       meta: `${recipe.servings} servings`,
+      calories_per_serving: recipe.calories_per_serving || null,
       liked: false,
       ingredients: recipe.ingredients,
       instructions: recipe.instructions,
