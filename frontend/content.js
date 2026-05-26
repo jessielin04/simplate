@@ -1,6 +1,4 @@
 // Injected into walmart.com pages by the extension.
-// Waits for a "simplate_atc" message, then polls for and clicks Add to Cart,
-// then selects the preferred fulfillment method (delivery or pickup).
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'simplate_ping') {
@@ -12,21 +10,76 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   const fulfillment = msg.fulfillment || 'delivery';
 
+  // Check unavailability BEFORE polling, so we don't wait 15s to find out.
+  const unavailableReason = getUnavailableReason();
+  if (unavailableReason) {
+    sendResponse({ success: false, reason: unavailableReason });
+    return true;
+  }
+
   pollAndClick()
     .then(async (success) => {
       if (success) {
         await sleep(2000);
         await selectFulfillment(fulfillment);
         await sleep(1000);
+        sendResponse({ success: true });
+      } else {
+        // Check again after timeout — might have rendered an OOS message
+        const reason = getUnavailableReason() || 'Button not found — item may be unavailable';
+        sendResponse({ success: false, reason });
       }
-      sendResponse({ success });
     })
-    .catch(() => sendResponse({ success: false }));
+    .catch(() => sendResponse({ success: false, reason: 'Unexpected error' }));
 
   return true;
 });
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Detect common Walmart unavailability states before wasting time polling.
+function getUnavailableReason() {
+  const bodyText = document.body.innerText;
+
+  const oosPhrases = [
+    'out of stock',
+    'currently unavailable',
+    'not available',
+    'sold out',
+    'unavailable',
+    'this item is no longer available',
+    'item is not available',
+  ];
+
+  // Check prominent page text (h1, product status elements) first
+  const statusEls = [
+    ...document.querySelectorAll(
+      '[data-automation-id="product-availability"], ' +
+      '[data-testid="fulfillment-summary"], ' +
+      '.prod-unavailableMsg, ' +
+      '[class*="unavailable"], ' +
+      '[class*="out-of-stock"]'
+    )
+  ];
+
+  for (const el of statusEls) {
+    const t = el.textContent.trim().toLowerCase();
+    for (const phrase of oosPhrases) {
+      if (t.includes(phrase)) return 'Out of stock';
+    }
+  }
+
+  // Broader fallback — only trigger if the ATC button is also absent,
+  // to avoid false positives from page text mentioning these words in context.
+  const hasATCButton = !!findATCButton();
+  if (!hasATCButton) {
+    for (const phrase of oosPhrases) {
+      if (bodyText.toLowerCase().includes(phrase)) return 'Out of stock';
+    }
+  }
+
+  return null;
+}
 
 async function selectFulfillment(preference) {
   const preferred = preference === 'delivery' ? 'delivery' : 'pickup';
@@ -45,8 +98,6 @@ async function tryPickFulfillment(type) {
     ),
   ];
 
-  console.log('[simplate] tryPickFulfillment — looking for:', keyword);
-
   for (const el of candidates) {
     const text = el.textContent.trim().toLowerCase();
     const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
@@ -58,20 +109,17 @@ async function tryPickFulfillment(type) {
       isVisible(el);
 
     if (matches) {
-      console.log('[simplate] clicking fulfillment element:', el);
       el.click();
       return true;
     }
   }
 
-  console.log('[simplate] no fulfillment match found for:', keyword);
   return false;
 }
 
 function pollAndClick(maxWaitMs = 15000, intervalMs = 400) {
   return new Promise((resolve) => {
     const start = Date.now();
-
     const timer = setInterval(async () => {
       const btn = findATCButton();
       if (btn) {
@@ -83,7 +131,6 @@ function pollAndClick(maxWaitMs = 15000, intervalMs = 400) {
       }
       if (Date.now() - start >= maxWaitMs) {
         clearInterval(timer);
-        console.log('[simplate] ATC button not found within timeout');
         resolve(false);
       }
     }, intervalMs);
@@ -105,7 +152,6 @@ function findATCButton() {
     if (btn && !btn.disabled && isVisible(btn)) return btn;
   }
 
-  // Fallback: text match — skip carousel/recommendation sections
   for (const btn of document.querySelectorAll('button')) {
     if (
       !btn.disabled &&

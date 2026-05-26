@@ -1275,3 +1275,57 @@ body {
 }
 .slot-day-num { font-size: 13px; font-weight: 700; margin-top: 2px; }
 .slot-type-btn { font-weight: 600; }
+
+/* ── ATC result banner ── */
+.atc-result-banner {
+  background: #fff8f0;
+  border: 1px solid #f0c080;
+  border-radius: 10px;
+  margin: 10px 12px 0;
+  padding: 10px 14px;
+  font-size: 12px;
+}
+.atc-result-added {
+  font-weight: 700;
+  color: #2a5c3a;
+  margin-bottom: 6px;
+}
+.atc-result-failed-label {
+  font-weight: 600;
+  color: #b85c00;
+  margin-bottom: 4px;
+}
+.atc-result-failed-item {
+  color: #7a3a00;
+  padding: 2px 0;
+}
+.atc-result-dismiss {
+  margin-top: 8px;
+  background: none;
+  border: 1px solid #d0a060;
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 11px;
+  color: #b85c00;
+  cursor: pointer;
+}
+.atc-result-dismiss:hover { background: #fdebd0; }
+
+/* ── Unavailable grocery item state ── */
+.item-dot.unavailable {
+  background: #e07040;
+}
+
+/* ── Try different product button ── */
+.try-different-btn {
+  background: none;
+  border: none;
+  padding: 2px 0 0;
+  font-size: 11px;
+  color: #b85c00;
+  cursor: pointer;
+  text-align: left;
+  font-weight: 600;
+}
+.try-different-btn:hover { text-decoration: underline; }
+.unavailable-row { opacity: 0.85; }

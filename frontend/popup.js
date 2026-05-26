@@ -208,43 +208,85 @@ function renderGrocery(el) {
     return;
   }
   const pending = state.groceryItems.filter(i => i.status === 'pending').length;
+  const unavailable = state.groceryItems.filter(i => i.status === 'unavailable').length;
+  const retryable = state.groceryItems.filter(i => i.status === 'selected' && i.itemId);
+
+  let bannerHtml;
+  if (unavailable > 0) {
+    bannerHtml = `<div class="alert-banner" style="background:#fff3e0;color:#b85c00;border-color:#f0c080;">
+      ${unavailable} item${unavailable > 1 ? 's' : ''} unavailable
+      <span style="color:#b85c00;">Pick a different product below to add it to cart.</span>
+    </div>`;
+  } else if (pending > 0) {
+    bannerHtml = `<div class="alert-banner">
+      ${pending} item${pending > 1 ? 's' : ''} need a product selected
+      <span>Tap any item below to choose.</span>
+    </div>`;
+  } else {
+    bannerHtml = `<div class="alert-banner" style="background:#d4edda;color:#1a5c2a;">
+      All ${state.groceryItems.length} items have products selected
+      <span style="color:#2a7a3e;">Ready to add directly to your Walmart cart.</span>
+    </div>`;
+  }
+
   el.innerHTML = `
     <div class="grocery-wrap">
-      ${pending > 0 ? `
-        <div class="alert-banner">
-          ${pending} items need a product selected
-          <span>Tap any item below to choose.</span>
-        </div>` : `
-        <div class="alert-banner" style="background:#d4edda;color:#1a5c2a;">
-          All ${state.groceryItems.length} items have products selected
-          <span style="color:#2a7a3e;">Ready to add directly to your Walmart cart.</span>
-        </div>`}
+      ${bannerHtml}
       <div class="grocery-list">
         ${state.groceryItems.map((item, i) => `
-          <div class="grocery-item" data-index="${i}">
+          <div class="grocery-item ${item.status === 'unavailable' ? 'unavailable-row' : ''}" data-index="${i}">
             <div class="item-dot ${item.status}"></div>
             <div class="item-info">
               <div class="item-name">${item.name}</div>
               <div class="item-sub">${item.sub}</div>
+              ${item.status === 'unavailable' ? `<button class="try-different-btn" data-index="${i}">Try different product →</button>` : ''}
             </div>
             ${item.status === 'pending'
               ? `<div class="item-arrow">›</div>`
+              : item.status === 'unavailable'
+              ? `<div class="item-arrow" style="color:#e07040;">›</div>`
               : `<div class="item-check checked"></div>`}
           </div>
         `).join('')}
       </div>
       <div class="grocery-footer">
         <button class="btn-full" id="addCartBtn">
-          ${pending > 0 ? `Add to cart | ${pending} items pending` : 'Add all to cart'}
+          ${unavailable > 0 && retryable.length > 0 ? `Add ${retryable.length} available item${retryable.length > 1 ? 's' : ''} to cart` :
+            pending > 0 ? `Add to cart | ${pending} items pending` : 'Add all to cart'}
         </button>
       </div>
     </div>
   `;
 
+  // "Try different product" buttons on unavailable items
+  el.querySelectorAll('.try-different-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const i = parseInt(btn.dataset.index);
+      const item = state.groceryItems[i];
+      item.sub = 'Searching...';
+      renderGrocery(el);
+      try {
+        const results = await searchWalmart(item.name);
+        if (results.length > 0) {
+          showProductPicker(item.name, results, i, el, /* onPick clears unavailable */ true);
+        } else {
+          item.sub = 'No products found';
+          renderGrocery(el);
+        }
+      } catch (e) {
+        item.sub = 'Error fetching product';
+        renderGrocery(el);
+      }
+    });
+  });
+
   el.querySelectorAll('.grocery-item').forEach(row => {
     row.addEventListener('click', async () => {
       const i = parseInt(row.dataset.index);
       const item = state.groceryItems[i];
+      // "Try different product" button handles unavailable rows — skip raw row click
+      if (item.status === 'unavailable') return;
       const name = item.name;
 
       item.sub = 'Searching...';
@@ -266,6 +308,7 @@ function renderGrocery(el) {
   });
 
   el.querySelector('#addCartBtn').addEventListener('click', async () => {
+    // Only send items that are selected and not flagged unavailable
     const selected = state.groceryItems.filter(i => i.status === 'selected' && i.itemId);
     if (selected.length === 0) {
       alert('No products selected yet. Click each item to pick a product first.');
@@ -284,20 +327,33 @@ function renderGrocery(el) {
     btn.disabled = true;
     btn.textContent = `Adding ${urls.length} item${urls.length > 1 ? 's' : ''} to cart…`;
 
-    chrome.runtime.sendMessage({ type: 'simplate_start_atc', urls, fulfillment: state.fulfillmentPreference }, (response) => {
-      btn.disabled = false;
-      btn.textContent = response?.added > 0
-        ? `✓ Added ${response.added} item${response.added > 1 ? 's' : ''} — cart opening…`
-        : 'Add all to cart';
-      setTimeout(() => {
-        btn.textContent = selected.length > 0 ? 'Add all to cart' : `Add to cart | ${selected.length} pending`;
-      }, 3000);
-    });
+    const itemNames = selected.map(i => i.productName || i.name);
+
+    chrome.runtime.sendMessage(
+      { type: 'simplate_start_atc', urls, itemNames, fulfillment: state.fulfillmentPreference },
+      (response) => {
+        btn.disabled = false;
+        const added = response?.added ?? 0;
+        const failed = response?.failed ?? [];
+
+        failed.forEach(({ name }) => {
+          const item = state.groceryItems.find(i => i.name === name);
+          if (item) { item.status = 'unavailable'; item.sub = 'Out of stock or unavailable'; item.needsRetry = true; }
+        });
+        if (added > 0) {
+          btn.textContent = `✓ Added ${added} item${added > 1 ? 's' : ''} — cart opening…`;
+          setTimeout(() => renderGrocery(el), 3000);
+        } else {
+          renderGrocery(el);
+        }
+      }
+    );
   });
 }
 
+
 // ── PRODUCT PICKER MODAL ─────────────────────────────────
-function showProductPicker(ingredientName, products, itemIndex, groceryEl) {
+function showProductPicker(ingredientName, products, itemIndex, groceryEl, clearUnavailable = false) {
   document.getElementById('productPickerModal')?.remove();
   const modal = document.createElement('div');
   modal.id = 'productPickerModal';
@@ -326,10 +382,14 @@ function showProductPicker(ingredientName, products, itemIndex, groceryEl) {
   modal.querySelectorAll('.product-picker-item').forEach(btn => {
     btn.addEventListener('click', () => {
       const p = products[parseInt(btn.dataset.index)];
-      state.groceryItems[itemIndex].status = 'selected';
-      state.groceryItems[itemIndex].sub = `${p.name}${p.price != null ? ' ' + p.price : ''}`;
-      state.groceryItems[itemIndex].itemId = p.id;
-      state.groceryItems[itemIndex].productUrl = p.url;
+      // Fully reset the item — clears unavailable/needsRetry regardless of how we got here
+      const gi = state.groceryItems[itemIndex];
+      gi.status = 'selected';
+      gi.productName = p.name;
+      gi.sub = `${p.name}${p.price != null ? ' ' + p.price : ''}`;
+      gi.itemId = p.id;
+      gi.productUrl = p.url;
+      gi.needsRetry = false;
       modal.remove();
       renderGrocery(groceryEl);
     });

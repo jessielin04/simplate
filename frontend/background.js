@@ -7,33 +7,30 @@ chrome.action.onClicked.addListener((tab) => {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type !== 'simplate_start_atc') return;
 
-  const { urls, fulfillment = 'delivery' } = msg;
+  const { urls, fulfillment = 'delivery', itemNames = [] } = msg;
   if (!urls || urls.length === 0) {
-    sendResponse({ done: true, added: 0 });
+    sendResponse({ done: true, added: 0, failed: [] });
     return true;
   }
 
-  addItemsSequentially(urls, fulfillment).then(added => {
-    chrome.tabs.create({ url: 'https://www.walmart.com/cart' });
-    sendResponse({ done: true, added });
+  addItemsSequentially(urls, itemNames, fulfillment).then(({ added, failed }) => {
+    openOrReloadCart();
+    sendResponse({ done: true, added, failed });
   });
 
   return true;
 });
 
-async function addItemsSequentially(urls, fulfillment) {
+async function addItemsSequentially(urls, itemNames, fulfillment) {
   let added = 0;
+  const failed = []; // { name, reason }
 
-  // Use active:true so Walmart doesn't throttle JS — same as before.
-  // The only change from the working version: we open in a NEW WINDOW
-  // so the user's current window keeps focus. The ATC window is minimized
-  // so it runs off-screen but stays active within its own window context.
   let atcWindow;
   try {
     atcWindow = await chrome.windows.create({ url: urls[0], type: 'normal', state: 'minimized' });
   } catch (e) {
     console.error('[simplate] could not create ATC window:', e);
-    return 0;
+    return { added: 0, failed: itemNames.map(n => ({ name: n, reason: 'Could not open window' })) };
   }
   const tab = atcWindow.tabs[0];
 
@@ -43,29 +40,24 @@ async function addItemsSequentially(urls, fulfillment) {
     }
 
     await waitForTabLoad(tab.id);
-
-    // Same timing as the working version
     await sleep(3500);
-
     await waitForContentScript(tab.id);
 
-    const success = await sendATCMessage(tab.id, fulfillment);
-    if (success) {
+    const result = await sendATCMessage(tab.id, fulfillment);
+    if (result.success) {
       added++;
       await sleep(3000);
     } else {
+      failed.push({ name: itemNames[i] || urls[i], reason: result.reason || 'Unknown error' });
       await sleep(1500);
     }
   }
 
-  // Extra buffer so the last cart mutation commits before closing
   await sleep(1500);
-
   try { await chrome.windows.remove(atcWindow.id); } catch (_) {}
-  return added;
+  return { added, failed };
 }
 
-// Ping the content script until it responds, with a timeout.
 function waitForContentScript(tabId, timeoutMs = 8000) {
   return new Promise((resolve) => {
     const start = Date.now();
@@ -86,17 +78,18 @@ function waitForContentScript(tabId, timeoutMs = 8000) {
   });
 }
 
+// Returns { success, reason } instead of just boolean
 async function sendATCMessage(tabId, fulfillment) {
   try {
     const response = await chrome.tabs.sendMessage(tabId, { type: 'simplate_atc', fulfillment });
-    return response?.success === true;
+    return response || { success: false, reason: 'No response' };
   } catch (e) {
     await sleep(1500);
     try {
       const response = await chrome.tabs.sendMessage(tabId, { type: 'simplate_atc', fulfillment });
-      return response?.success === true;
+      return response || { success: false, reason: 'No response' };
     } catch (_) {
-      return false;
+      return { success: false, reason: 'Could not reach content script' };
     }
   }
 }
@@ -117,3 +110,15 @@ function waitForTabLoad(tabId) {
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Find an existing Walmart cart tab and reload it, or open a new one.
+async function openOrReloadCart() {
+  const cartUrl = 'https://www.walmart.com/cart';
+  const tabs = await chrome.tabs.query({ url: 'https://www.walmart.com/cart*' });
+  if (tabs.length > 0) {
+    await chrome.tabs.update(tabs[0].id, { active: true, url: cartUrl });
+    await chrome.windows.update(tabs[0].windowId, { focused: true });
+  } else {
+    chrome.tabs.create({ url: cartUrl });
+  }
+}
