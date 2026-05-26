@@ -11,6 +11,8 @@ const state = {
   profilePhoto: null,
   profileEditing: false,
   fulfillmentPreference: 'delivery', // 'delivery' | 'pickup'
+  fulfillmentSet: false,
+  nudgeDismissed: false,
   currentTab: 'chat',
   currentDay: new Date().getDay(),
   groceryItems: [],
@@ -97,13 +99,23 @@ function formatRecipe(recipe) {
 
 // ── CHAT (our backend version) ───────────────────────────
 function renderChat(el) {
-  const profileIncomplete = state.profileDietTags.length === 0 && state.profileGoalTags.length === 0;
+  const missingName = !state.profileName;
+  const missingPhoto = !state.profilePhoto;
+  const missingFulfillment = !state.fulfillmentSet;
+  const nudgeItems = [
+    missingName && 'name',
+    missingPhoto && 'photo',
+    missingFulfillment && 'fulfillment',
+  ].filter(Boolean);
+  const showNudge = nudgeItems.length > 0 && !state.nudgeDismissed;
+
   el.innerHTML = `
     <div class="chat-wrap">
-      ${profileIncomplete ? `
-        <div class="profile-nudge-banner" id="profileNudgeBtn">
-          Complete your profile
-          <span>Add dietary restrictions &amp; health goals for better suggestions →</span>
+      ${showNudge ? `
+        <div class="profile-nudge-banner" id="setupNudge">
+          <span class="nudge-label">Complete profile:</span>
+          ${nudgeItems.map(item => `<button class="nudge-item" data-item="${item}">${item.charAt(0).toUpperCase() + item.slice(1)}</button>`).join('<span class="nudge-dot">·</span>')}
+          <button class="nudge-dismiss" id="nudgeDismiss">×</button>
         </div>` : ''}
       <div class="chat-messages" id="chatMessages">${state.chatMessages.map((m, idx) => {
         if (m.role === 'recipe-actions') {
@@ -189,8 +201,20 @@ function renderChat(el) {
     });
   });
 
-  const nudge = el.querySelector('#profileNudgeBtn');
-  if (nudge) nudge.addEventListener('click', () => renderTab('profile'));
+  // Nudge banner handlers
+  el.querySelectorAll('.nudge-item').forEach(btn => {
+    btn.addEventListener('click', () => renderTab('profile'));
+  });
+  const nudgeDismiss = el.querySelector('#nudgeDismiss');
+  if (nudgeDismiss) {
+    nudgeDismiss.addEventListener('click', e => {
+      e.stopPropagation();
+      state.nudgeDismissed = true;
+      // Only persist dismissal if all fields are intentionally skipped
+      chrome.storage.local.set({ nudgeDismissed: true });
+      renderTab('chat');
+    });
+  }
 }
 
 // ── WALMART SEARCH (via backend scraper) ─────────────────
@@ -942,7 +966,8 @@ function renderProfile(el) {
   el.querySelectorAll('.fulfill-pill').forEach(btn => {
     btn.addEventListener('click', () => {
       state.fulfillmentPreference = btn.dataset.val;
-      chrome.storage.local.set({ fulfillmentPreference: state.fulfillmentPreference });
+      state.fulfillmentSet = true;
+      chrome.storage.local.set({ fulfillmentPreference: state.fulfillmentPreference, fulfillmentSet: true });
       el.querySelectorAll('.fulfill-pill').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
     });
@@ -970,7 +995,7 @@ function renderProfile(el) {
   });
 
   el.querySelector('#signOutBtn').addEventListener('click', () => {
-    chrome.storage.local.remove(['onboarded', 'fulfillmentPreference', 'profileName', 'profilePhoto', 'profileDietTags', 'profileGoalTags', 'householdSize', 'weeklyBudget', 'dailyCalories'], () => {
+    chrome.storage.local.remove(['onboarded', 'fulfillmentPreference', 'fulfillmentSet', 'profileName', 'profilePhoto', 'profileDietTags', 'profileGoalTags', 'householdSize', 'weeklyBudget', 'dailyCalories', 'nudgeDismissed'], () => {
       Object.assign(state, {
         diet: { lifestyle: [], allergies: [], other: '' },
         goals: [],
@@ -1164,8 +1189,8 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   chrome.storage.local.get([
-    'onboarded', 'fulfillmentPreference', 'profileName', 'profilePhoto',
-    'profileDietTags', 'profileGoalTags', 'householdSize', 'weeklyBudget', 'dailyCalories'
+    'onboarded', 'fulfillmentPreference', 'fulfillmentSet', 'profileName', 'profilePhoto',
+    'profileDietTags', 'profileGoalTags', 'householdSize', 'weeklyBudget', 'dailyCalories', 'nudgeDismissed'
   ], result => {
     if (result.fulfillmentPreference) state.fulfillmentPreference = result.fulfillmentPreference;
     if (result.profileName)     state.profileName     = result.profileName;
@@ -1175,6 +1200,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (result.householdSize)   state.householdSize   = result.householdSize;
     if (result.weeklyBudget)    state.weeklyBudget    = result.weeklyBudget;
     if (result.dailyCalories)   state.dailyCalories   = result.dailyCalories;
+    if (result.fulfillmentSet)  state.fulfillmentSet  = result.fulfillmentSet;
+    if (result.nudgeDismissed)  state.nudgeDismissed  = result.nudgeDismissed;
     if (result.onboarded) {
       showStep('step-app');
       renderTab('chat');

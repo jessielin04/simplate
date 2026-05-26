@@ -417,7 +417,7 @@ body {
 .hh-label { font-size: 13px; color: #1a2e22; margin-right: 4px; }
 
 .target-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; }
-.target-label { font-size: 11px; font-weight: 700; color: #4a7c59; text-transform: uppercase; letter-spacing: 0.06em; }
+.target-label { min-width: 80px; font-size: 11px; font-weight: 700; color: #4a7c59; text-transform: uppercase; letter-spacing: 0.06em; }
 .target-val { color: #4a7c59; font-weight: 600; }
 
 .signout-btn { width: 100%; background: none; border: none; color: #9aada0; font-size: 13px; padding: 10px; cursor: pointer; margin: 8px 0; text-align: center; }
@@ -432,6 +432,8 @@ body {
   border: 1.5px solid #c8d8cc;
   border-radius: 8px;
   padding: 4px 8px;
+  width: 120px;
+  box-sizing: border-box;
 }
 
 .target-input-wrap:focus-within {
@@ -439,7 +441,9 @@ body {
 }
 
 .target-input {
-  width: 56px;
+  flex: 1;
+  min-width: 0;
+  width: auto;
   border: none;
   background: transparent;
   font-size: 13px;
@@ -1180,22 +1184,50 @@ body {
 
 /* ── Profile nudge banner (chat tab) ── */
 .profile-nudge-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   background: #e8f0ea;
-  color: #2a5c3a;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 8px 14px;
-  cursor: pointer;
   border-bottom: 1px solid #d0e0d4;
-  transition: background 0.15s;
+  padding: 0 12px;
+  height: 34px;
+  flex-shrink: 0;
 }
-.profile-nudge-banner:hover { background: #dceade; }
-.profile-nudge-banner span {
-  display: block;
-  font-weight: 400;
+.nudge-label {
   font-size: 11px;
-  color: #4a7c59;
+  font-weight: 600;
+  color: #2a5c3a;
+  white-space: nowrap;
+  margin-right: 2px;
 }
+.nudge-item {
+  background: none;
+  border: none;
+  font-size: 11px;
+  font-weight: 600;
+  color: #4a7c59;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+.nudge-item:hover { color: #2a5c3a; }
+.nudge-dot {
+  font-size: 11px;
+  color: #9aada0;
+}
+.nudge-dismiss {
+  background: none;
+  border: none;
+  font-size: 14px;
+  color: #9aada0;
+  cursor: pointer;
+  padding: 0;
+  margin-left: auto;
+  line-height: 1;
+}
+.nudge-dismiss:hover { color: #2a5c3a; }
 /* ── Empty states (List + Meals tabs) ── */
 .tab-empty-state {
   display: flex;
