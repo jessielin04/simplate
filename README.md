@@ -23,7 +23,7 @@ A Chrome extension that acts as your personal nutrition assistant inside Walmart
 cd backend
 python -m venv venv
 venv\Scripts\activate
-pip install -r requirements.txt
+pip install flask flask-cors groq httpx python-dotenv
 ```
 
 > **Mac:** use `source venv/bin/activate` instead of `venv\Scripts\activate`
