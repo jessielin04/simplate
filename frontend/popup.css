@@ -598,9 +598,12 @@ body {
   display: none;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #4a7c59;
   cursor: pointer;
   box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  line-height: 1;
 }
 
 .avatar-wrap:hover .avatar-edit-btn {
@@ -639,9 +642,10 @@ body {
 .name-edit-btn {
   background: none;
   border: none;
-  font-size: 13px;
+  font-size: 16px;
+  font-weight: 700;
   cursor: pointer;
-  color: #9aada0;
+  color: #4a7c59;
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -1374,4 +1378,21 @@ body {
   margin: 0;
   padding-left: 18px;
   line-height: 1.7;
+}
+
+/* ── Saved item move-category button ── */
+.saved-item-move {
+  background: none;
+  border: none;
+  font-size: 14px;
+  color: #9aada0;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+.saved-item-move:hover { color: #4a7c59; }
+.profile-name--placeholder {
+  color: #9aada0;
+  font-weight: 400;
+  font-style: italic;
 }

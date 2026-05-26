@@ -5,9 +5,9 @@ const state = {
   householdSize: 1,
   weeklyBudget: 120,
   dailyCalories: 1800,
-  profileDietTags: ['Gluten-free'],
-  profileGoalTags: ['Gain muscle'],
-  profileName: 'Mary Jane',
+  profileDietTags: [],
+  profileGoalTags: [],
+  profileName: '',
   profilePhoto: null,
   profileEditing: false,
   fulfillmentPreference: 'delivery', // 'delivery' | 'pickup'
@@ -520,23 +520,22 @@ function renderMeals(el) {
       const meal = dayMeals[mi];
 
       if (!meal.liked) {
-        showCategoryPicker(meal, (cats) => {
-          meal.liked = true;
-          meal.savedCategories = cats;
-          cats.forEach(cat => {
-            if (!state.savedMeals[cat]) state.savedMeals[cat] = [];
-            if (!state.savedMeals[cat].find(m => m.name === meal.name)) {
-              state.savedMeals[cat].push({
-                name: meal.name,
-                meta: meal.meta,
-                ingredients: meal.ingredients || null,
-                instructions: meal.instructions || null,
-                description: meal.description || null
-              });
-            }
+        // Auto-save to the category that matches the meal slot type
+        const typeToCategory = { BREAKFAST: 'Breakfast', LUNCH: 'Lunch', DINNER: 'Dinner' };
+        const autoCat = typeToCategory[meal.type] || 'Snacks';
+        meal.liked = true;
+        meal.savedCategories = [autoCat];
+        if (!state.savedMeals[autoCat]) state.savedMeals[autoCat] = [];
+        if (!state.savedMeals[autoCat].find(m => m.name === meal.name)) {
+          state.savedMeals[autoCat].push({
+            name: meal.name,
+            meta: meal.meta,
+            ingredients: meal.ingredients || null,
+            instructions: meal.instructions || null,
+            description: meal.description || null
           });
-          renderMeals(el);
-        });
+        }
+        renderMeals(el);
       } else {
         meal.liked = false;
         (meal.savedCategories || []).forEach(cat => {
@@ -624,11 +623,12 @@ function renderSaved(el) {
                 ? `<p class="saved-empty-cat">No saved ${cat.toLowerCase()} yet.</p>`
                 : items.map((m, i) => `
                     <div class="saved-item" data-cat="${cat}" data-index="${i}">
-                      <div class="saved-item-thumb">${catIcon(cat)}</div>
+                      <div class="saved-item-thumb" style="display:none"></div>
                       <div class="saved-item-info">
                         <div class="saved-item-name">${m.name}</div>
                         <div class="saved-item-meta">${m.meta}</div>
                       </div>
+                      <button class="saved-item-move" data-cat="${cat}" data-index="${i}" title="Move to category">↕</button>
                       <button class="saved-item-expand" data-cat="${cat}" data-index="${i}" title="View recipe">▾</button>
                       <button class="saved-item-heart liked" data-cat="${cat}" data-index="${i}">♥</button>
                     </div>
@@ -670,6 +670,27 @@ function renderSaved(el) {
       renderSaved(el);
     });
   });
+  el.querySelectorAll('.saved-item-move').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const cat = btn.dataset.cat;
+      const idx = parseInt(btn.dataset.index);
+      const meal = state.savedMeals[cat][idx];
+      showCategoryPicker(meal, (newCats) => {
+        // Remove from current category
+        state.savedMeals[cat].splice(idx, 1);
+        // Add to new categories
+        newCats.forEach(newCat => {
+          if (!state.savedMeals[newCat]) state.savedMeals[newCat] = [];
+          if (!state.savedMeals[newCat].find(m => m.name === meal.name)) {
+            state.savedMeals[newCat].push(meal);
+          }
+        });
+        renderSaved(el);
+      });
+    });
+  });
+
   el.querySelectorAll('.saved-item-expand').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -833,13 +854,13 @@ function renderProfile(el) {
           <div class="avatar" id="avatarCircle">
             ${state.profilePhoto ? `<img src="${state.profilePhoto}" class="avatar-img" />` : ''}
           </div>
-          <div class="avatar-edit-btn" id="avatarEditBtn">✏️</div>
+          <div class="avatar-edit-btn" id="avatarEditBtn">+</div>
           <input type="file" id="avatarFileInput" accept="image/*" style="display:none" />
         </div>
         <div class="profile-name-wrap">
-          <div class="profile-name" id="profileNameDisplay" ${state.profileEditing ? 'style="display:none"' : ''}>${state.profileName}</div>
+          <div class="profile-name ${!state.profileName ? 'profile-name--placeholder' : ''}" id="profileNameDisplay" ${state.profileEditing ? 'style="display:none"' : ''}>${state.profileName || 'Add name'}</div>
           <input class="profile-name-input" id="profileNameInput" value="${state.profileName}" ${state.profileEditing ? '' : 'style="display:none"'} />
-          <button class="name-edit-btn" id="nameEditBtn" ${state.profileEditing ? 'style="display:none"' : ''}>✏️</button>
+          <button class="name-edit-btn" id="nameEditBtn" ${state.profileEditing ? 'style="display:none"' : ''}>+</button>
         </div>
       </div>
 
@@ -929,23 +950,27 @@ function renderProfile(el) {
 
   el.querySelector('#budgetInput').addEventListener('change', e => {
     state.weeklyBudget = parseInt(e.target.value) || 0;
+    chrome.storage.local.set({ weeklyBudget: state.weeklyBudget });
   });
   el.querySelector('#caloriesInput').addEventListener('change', e => {
     state.dailyCalories = parseInt(e.target.value) || 0;
+    chrome.storage.local.set({ dailyCalories: state.dailyCalories });
   });
   el.querySelector('#profileDecrement').addEventListener('click', () => {
     if (state.householdSize > 1) {
       state.householdSize--;
       el.querySelector('#profileHH').textContent = state.householdSize;
+      chrome.storage.local.set({ householdSize: state.householdSize });
     }
   });
   el.querySelector('#profileIncrement').addEventListener('click', () => {
     state.householdSize++;
     el.querySelector('#profileHH').textContent = state.householdSize;
+    chrome.storage.local.set({ householdSize: state.householdSize });
   });
 
   el.querySelector('#signOutBtn').addEventListener('click', () => {
-    chrome.storage.local.remove(['onboarded', 'fulfillmentPreference'], () => {
+    chrome.storage.local.remove(['onboarded', 'fulfillmentPreference', 'profileName', 'profilePhoto', 'profileDietTags', 'profileGoalTags', 'householdSize', 'weeklyBudget', 'dailyCalories'], () => {
       Object.assign(state, {
         diet: { lifestyle: [], allergies: [], other: '' },
         goals: [],
@@ -975,6 +1000,7 @@ function renderProfile(el) {
     reader.onload = e => {
       state.profilePhoto = e.target.result;
       avatarCircle.innerHTML = `<img src="${state.profilePhoto}" class="avatar-img" />`;
+      chrome.storage.local.set({ profilePhoto: state.profilePhoto });
     };
     reader.readAsDataURL(file);
   });
@@ -998,6 +1024,7 @@ function renderProfile(el) {
     nameDisplay.style.display = 'block';
     nameEditBtn.style.display = 'inline-flex';
     nameInput.style.display = 'none';
+    chrome.storage.local.set({ profileName: state.profileName });
   });
   nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') nameInput.blur(); });
 
@@ -1034,8 +1061,10 @@ function renderProfile(el) {
       const val = btn.dataset.val;
       if (section === 'diet') {
         state.profileDietTags = state.profileDietTags.filter(t => t !== val);
+        chrome.storage.local.set({ profileDietTags: state.profileDietTags });
       } else {
         state.profileGoalTags = state.profileGoalTags.filter(t => t !== val);
+        chrome.storage.local.set({ profileGoalTags: state.profileGoalTags });
       }
       renderProfile(el);
     });
@@ -1082,14 +1111,18 @@ function addTag(val, section, tagsEl, el) {
   const tags = section === 'diet' ? state.profileDietTags : state.profileGoalTags;
   if (tags.map(t => t.toLowerCase()).includes(val.toLowerCase())) return;
   tags.push(val);
+  if (section === 'diet') chrome.storage.local.set({ profileDietTags: state.profileDietTags });
+  else chrome.storage.local.set({ profileGoalTags: state.profileGoalTags });
   const span = document.createElement('span');
   span.className = 'tag-pill';
   span.innerHTML = `${val} <button class="tag-remove" data-section="${section}" data-val="${val}">×</button>`;
   span.querySelector('.tag-remove').addEventListener('click', () => {
     if (section === 'diet') {
       state.profileDietTags = state.profileDietTags.filter(t => t !== val);
+      chrome.storage.local.set({ profileDietTags: state.profileDietTags });
     } else {
       state.profileGoalTags = state.profileGoalTags.filter(t => t !== val);
+      chrome.storage.local.set({ profileGoalTags: state.profileGoalTags });
     }
     span.remove();
   });
@@ -1120,13 +1153,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     state.householdSize = parseInt(document.getElementById('hhCount')?.textContent) || 1;
 
-    chrome.storage.local.set({ onboarded: true });
+    chrome.storage.local.set({
+      onboarded: true,
+      profileDietTags: state.profileDietTags,
+      profileGoalTags: state.profileGoalTags,
+      householdSize: state.householdSize,
+    });
     showStep('step-app');
     renderTab('chat');
   });
 
-  chrome.storage.local.get(['onboarded', 'fulfillmentPreference'], result => {
+  chrome.storage.local.get([
+    'onboarded', 'fulfillmentPreference', 'profileName', 'profilePhoto',
+    'profileDietTags', 'profileGoalTags', 'householdSize', 'weeklyBudget', 'dailyCalories'
+  ], result => {
     if (result.fulfillmentPreference) state.fulfillmentPreference = result.fulfillmentPreference;
+    if (result.profileName)     state.profileName     = result.profileName;
+    if (result.profilePhoto)    state.profilePhoto    = result.profilePhoto;
+    if (result.profileDietTags) state.profileDietTags = result.profileDietTags;
+    if (result.profileGoalTags) state.profileGoalTags = result.profileGoalTags;
+    if (result.householdSize)   state.householdSize   = result.householdSize;
+    if (result.weeklyBudget)    state.weeklyBudget    = result.weeklyBudget;
+    if (result.dailyCalories)   state.dailyCalories   = result.dailyCalories;
     if (result.onboarded) {
       showStep('step-app');
       renderTab('chat');
