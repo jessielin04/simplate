@@ -425,6 +425,10 @@ function renderChat(el) {
         }
         return `<div class="chat-bubble ${m.role}">${m.text.replace(/\n/g, '<br>')}</div>`;
       }).join('')}</div>
+      ${state.pixabotId ? `
+      <div class="chat-buddy" id="chatBuddy" title="${state.profileName || ''}">
+        <img src="${pixabotUrl(state.pixabotId)}" alt="" />
+      </div>` : ''}
       <div class="chat-input-row">
         <input class="chat-input" id="chatInput" placeholder="Ask about your cart..." />
         <button class="chat-send" id="chatSend">
