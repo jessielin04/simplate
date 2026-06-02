@@ -1,9 +1,26 @@
 from flask import Blueprint, request, jsonify
-from llm import chat
+from llm import chat, regenerate_meal
 from scraper import search_ingredient
 import json
 
 bp = Blueprint("api", __name__)
+
+
+@bp.route("/regenerate-meal", methods=["POST"])
+def regenerate_meal_endpoint():
+    body = request.get_json() or {}
+    meal_type = body.get("meal_type", "meal")
+    restrictions = body.get("dietary_restrictions", [])
+    goals = body.get("health_goals", [])
+    exclude = body.get("exclude", [])
+
+    try:
+        recipe = regenerate_meal(meal_type, restrictions, goals, exclude)
+        if not recipe or "ingredients" not in recipe:
+            return jsonify({"error": "Could not generate a valid recipe"}), 502
+        return jsonify({"recipe": recipe})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @bp.route("/chat", methods=["POST"])

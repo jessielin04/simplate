@@ -1,5 +1,6 @@
 // ── State ──────────────────────────────────────────────
 const state = {
+  activeProfileId: null,
   diet: { lifestyle: [], allergies: [], other: '' },
   goals: [],
   householdSize: 1,
@@ -27,7 +28,280 @@ const state = {
 
 const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-// ── Step navigation ─────────────────────────────────────
+// ── Profiles & persistence ──────────────────────────────
+// Storage shape (chrome.storage.local):
+//   { profiles: [ {id, name, avatar, dietTags, goalTags, householdSize,
+//                  weeklyBudget, dailyCalories, fulfillmentPreference,
+//                  fulfillmentSet, savedMeals, groceryItems, meals,
+//                  weekStartISO} ],
+//     activeProfileId: "uuid" }
+// Chat history is intentionally NOT persisted (resets each session by design).
+
+function uuid() {
+  if (crypto?.randomUUID) return crypto.randomUUID();
+  return 'p-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+}
+
+// ISO date (YYYY-MM-DD) of the Sunday that begins the current week.
+function currentWeekStartISO() {
+  const now = new Date();
+  const sunday = new Date(now);
+  sunday.setHours(0, 0, 0, 0);
+  sunday.setDate(now.getDate() - now.getDay());
+  return sunday.toISOString().slice(0, 10);
+}
+
+function emptySavedMeals() {
+  return { Breakfast: [], Lunch: [], Dinner: [], Snacks: [] };
+}
+
+// Build a fresh profile object from the current onboarding/session state.
+function profileFromState() {
+  return {
+    id: state.activeProfileId || uuid(),
+    name: state.profileName || '',
+    avatar: state.pixabotId || null,
+    dietTags: state.profileDietTags.slice(),
+    goalTags: state.profileGoalTags.slice(),
+    householdSize: state.householdSize,
+    weeklyBudget: state.weeklyBudget,
+    dailyCalories: state.dailyCalories,
+    fulfillmentPreference: state.fulfillmentPreference,
+    fulfillmentSet: state.fulfillmentSet,
+    savedMeals: state.savedMeals,
+    groceryItems: state.groceryItems,
+    meals: state.meals,
+    weekStartISO: currentWeekStartISO(),
+  };
+}
+
+// Load a stored profile object into live session state.
+function loadProfileIntoState(p) {
+  state.activeProfileId = p.id;
+  state.profileName = p.name || '';
+  state.pixabotId = p.avatar || null;
+  state.profileDietTags = Array.isArray(p.dietTags) ? p.dietTags.slice() : [];
+  state.profileGoalTags = Array.isArray(p.goalTags) ? p.goalTags.slice() : [];
+  // Keep onboarding-facing diet array in sync so chat sends restrictions.
+  state.diet = { lifestyle: state.profileDietTags.slice(), allergies: [], other: '' };
+  state.goals = state.profileGoalTags.slice();
+  state.householdSize = p.householdSize || 1;
+  state.weeklyBudget = p.weeklyBudget ?? 120;
+  state.dailyCalories = p.dailyCalories ?? 1800;
+  state.fulfillmentPreference = p.fulfillmentPreference || 'delivery';
+  state.fulfillmentSet = !!p.fulfillmentSet;
+  state.savedMeals = p.savedMeals && typeof p.savedMeals === 'object'
+    ? p.savedMeals : emptySavedMeals();
+  for (const cat of ['Breakfast', 'Lunch', 'Dinner', 'Snacks']) {
+    if (!Array.isArray(state.savedMeals[cat])) state.savedMeals[cat] = [];
+  }
+  state.groceryItems = Array.isArray(p.groceryItems) ? p.groceryItems : [];
+
+  // Meals are current-week-only. If the stored week isn't this week, reset.
+  if (p.weekStartISO === currentWeekStartISO() && p.meals && typeof p.meals === 'object') {
+    state.meals = p.meals;
+  } else {
+    state.meals = {};
+  }
+
+  // Chat always starts fresh.
+  state.chatMessages = [
+    { role: 'bot', text: "Hi! I'm Simplate, your nutrition assistant. Ask me anything about your cart or meal plan." }
+  ];
+  state.nudgeDismissed = false;
+  state.currentTab = 'chat';
+  state.currentDay = new Date().getDay();
+}
+
+// Persist the active profile's current state back into the profiles array.
+// Writes are SERIALIZED through a promise chain so two in-flight writes can't
+// each read a stale list and clobber/duplicate each other. As a safety net we
+// also dedupe by id on every write (last-write-wins per id).
+let _persistTimer = null;
+let _writeChain = Promise.resolve();
+
+function _doWrite() {
+  _writeChain = _writeChain.then(() => new Promise(resolve => {
+    if (!state.activeProfileId) return resolve();
+    chrome.storage.local.get(['profiles'], ({ profiles }) => {
+      let list = Array.isArray(profiles) ? profiles : [];
+      const updated = profileFromState();
+      // Replace the matching id if present, else append.
+      const idx = list.findIndex(p => p.id === updated.id);
+      if (idx >= 0) list[idx] = updated;
+      else list.push(updated);
+      // Safety net: collapse any accidental duplicate ids (keep last).
+      const seen = new Map();
+      for (const p of list) seen.set(p.id, p);
+      list = Array.from(seen.values());
+      chrome.storage.local.set({ profiles: list, activeProfileId: state.activeProfileId }, resolve);
+    });
+  }));
+  return _writeChain;
+}
+
+function persistActiveProfile(immediate = false) {
+  if (!state.activeProfileId) return; // not onboarded yet
+  if (immediate) { clearTimeout(_persistTimer); return _doWrite(); }
+  clearTimeout(_persistTimer);
+  _persistTimer = setTimeout(_doWrite, 250);
+}
+
+// Cancel any pending debounced write (used on sign-out to avoid a late write
+// landing after the session was cleared).
+function cancelPendingPersist() { clearTimeout(_persistTimer); }
+
+// Convenience: call after any mutation to grocery / meals / saved data.
+function saveData() { persistActiveProfile(); }
+
+// ── Profile picker ──────────────────────────────────────
+let _managingProfiles = false;
+
+function renderProfilePicker() {
+  chrome.storage.local.get(['profiles'], ({ profiles }) => {
+    const list = Array.isArray(profiles) ? profiles : [];
+    const grid = document.getElementById('profilesGrid');
+    if (!grid) return;
+
+    grid.classList.toggle('managing', _managingProfiles);
+
+    const cards = list.map(p => {
+      const avatarInner = p.avatar
+        ? `<img src="${pixabotUrl(p.avatar)}" alt="" />`
+        : '🙂';
+      const safeName = (p.name || 'Profile').replace(/</g, '&lt;');
+      return `
+        <div class="profile-card" role="button" tabindex="0" data-id="${p.id}">
+          <button class="profile-card-delete" data-id="${p.id}" title="Delete profile">×</button>
+          <div class="profile-card-avatar">${avatarInner}</div>
+          <div class="profile-card-name">${safeName}</div>
+        </div>`;
+    }).join('');
+
+    const addCard = `
+      <div class="profile-card add-card" role="button" tabindex="0" id="addProfileCard">
+        <div class="profile-card-avatar placeholder-add">+</div>
+        <div class="profile-card-name">Add profile</div>
+      </div>`;
+
+    grid.innerHTML = cards + addCard;
+
+    grid.querySelectorAll('.profile-card[data-id]').forEach(card => {
+      card.addEventListener('click', () => {
+        if (_managingProfiles) return; // ignore selection while managing
+        const id = card.dataset.id;
+        const profile = list.find(p => p.id === id);
+        if (!profile) return;
+        loadProfileIntoState(profile);
+        ensurePixabotId();
+        _managingProfiles = false;
+        // Record which profile is active WITHOUT rewriting the profiles array
+        // (selecting doesn't change profile data; rewriting risks races/dupes).
+        chrome.storage.local.set({ activeProfileId: id });
+        showStep('step-app');
+        renderTab('chat');
+      });
+    });
+
+    grid.querySelectorAll('.profile-card-delete').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteProfile(btn.dataset.id);
+      });
+    });
+
+    document.getElementById('addProfileCard').addEventListener('click', () => {
+      startOnboardingForNewProfile();
+    });
+
+    const toggle = document.getElementById('profilesManageToggle');
+    toggle.classList.toggle('active', _managingProfiles);
+    toggle.textContent = _managingProfiles ? 'Done' : 'Manage profiles';
+    toggle.onclick = () => {
+      _managingProfiles = !_managingProfiles;
+      renderProfilePicker();
+    };
+  });
+}
+
+// Reset session state to onboarding defaults and start the onboarding flow
+// for a brand-new profile (does not touch the stored profiles array until finish).
+function startOnboardingForNewProfile() {
+  _managingProfiles = false;
+  Object.assign(state, {
+    activeProfileId: null, // assigned on finish
+    diet: { lifestyle: [], allergies: [], other: '' },
+    goals: [],
+    householdSize: 1,
+    weeklyBudget: 120,
+    dailyCalories: 1800,
+    profileDietTags: [],
+    profileGoalTags: [],
+    profileName: '',
+    pixabotId: null,
+    profileEditing: false,
+    fulfillmentPreference: 'delivery',
+    fulfillmentSet: false,
+    nudgeDismissed: false,
+    currentTab: 'chat',
+    currentDay: new Date().getDay(),
+    groceryItems: [],
+    meals: {},
+    savedMeals: emptySavedMeals(),
+    savedSearch: '',
+    savedFilter: 'All',
+    chatMessages: [
+      { role: 'bot', text: "Hi! I'm Simplate, your nutrition assistant. Ask me anything about your cart or meal plan." }
+    ],
+  });
+  // Reset onboarding pill UI so nothing carries over from a previous profile.
+  document.querySelectorAll('#step-diet .pill.selected, #step-goals .pill.selected')
+    .forEach(p => p.classList.remove('selected'));
+  const dietOther = document.getElementById('dietOther');
+  if (dietOther) dietOther.value = '';
+  const hhCount = document.getElementById('hhCount');
+  if (hhCount) hhCount.textContent = '1';
+  showStep('step-welcome');
+}
+
+// Delete a profile from storage, then route to picker or onboarding.
+function deleteProfile(id) {
+  const proceed = confirm('Delete this profile? Saved meals and lists for it will be removed. This cannot be undone.');
+  if (!proceed) return;
+  // Stop any debounced write that could re-add the profile we're deleting.
+  cancelPendingPersist();
+  chrome.storage.local.get(['profiles', 'activeProfileId'], ({ profiles, activeProfileId }) => {
+    let list = Array.isArray(profiles) ? profiles : [];
+    list = list.filter(p => p.id !== id);
+    const updates = { profiles: list };
+    const deletedActive = (activeProfileId === id) || (state.activeProfileId === id);
+    if (deletedActive) updates.activeProfileId = null;
+    chrome.storage.local.set(updates, () => {
+      // If we deleted the profile we're currently signed into, clear the live
+      // session so nothing re-persists it and so the app screen isn't left up.
+      if (deletedActive) state.activeProfileId = null;
+      _managingProfiles = false;
+      if (list.length === 0) {
+        startOnboardingForNewProfile();
+      } else {
+        showStep('step-profiles');
+        renderProfilePicker();
+      }
+    });
+  });
+}
+
+// Save active profile, clear session, return to the profile picker.
+function signOutToPicker() {
+  cancelPendingPersist();
+  persistActiveProfile(true); // serialized immediate write of current state
+  state.activeProfileId = null;
+  _managingProfiles = false;
+  showStep('step-profiles');
+  renderProfilePicker();
+}
+
+// ── Step navigation (continued) ─────────────────────────
 function showStep(id) {
   document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
@@ -35,6 +309,11 @@ function showStep(id) {
 
 // ── Pill toggle ─────────────────────────────────────────
 function setupPills() {
+  // Safety: no health-goal pill should ever start pre-selected (ED-risk).
+  // Strip any stray `selected` class on goal pills regardless of markup.
+  document.querySelectorAll('.pill[data-group="goal"].selected')
+    .forEach(p => p.classList.remove('selected'));
+
   document.querySelectorAll('.pill').forEach(pill => {
     pill.addEventListener('click', () => {
       pill.classList.toggle('selected');
@@ -115,7 +394,7 @@ function loadPixabotImage(id, imgEl) {
 function ensurePixabotId() {
   if (!state.pixabotId) {
     state.pixabotId = randomPixabotId();
-    chrome.storage.local.set({ pixabotId: state.pixabotId });
+    saveData();
   }
 }
 
@@ -177,8 +456,8 @@ function renderChat(el) {
               role: m.role === 'bot' ? 'assistant' : 'user',
               content: m.text
             })),
-          dietary_restrictions: state.diet.lifestyle.concat(state.diet.allergies),
-          health_goals: state.goals
+          dietary_restrictions: state.profileDietTags,
+          health_goals: state.profileGoalTags
         })
       });
       const data = await res.json();
@@ -214,6 +493,7 @@ function renderChat(el) {
           status: 'pending',
           itemId: null
         }));
+        saveData();
         renderTab('list');
       } else if (btn.dataset.action === 'add-to-meals') {
         showMealSlotPicker(recipe);
@@ -229,9 +509,7 @@ function renderChat(el) {
   if (nudgeDismiss) {
     nudgeDismiss.addEventListener('click', e => {
       e.stopPropagation();
-      state.nudgeDismissed = true;
-      // Only persist dismissal if all fields are intentionally skipped
-      chrome.storage.local.set({ nudgeDismissed: true });
+      state.nudgeDismissed = true; // session-only; resets each launch by design
       renderTab('chat');
     });
   }
@@ -292,7 +570,13 @@ function renderGrocery(el) {
               <div class="item-sub">${item.sub}</div>
               ${item.status === 'unavailable' ? `<button class="try-different-btn" data-index="${i}">Try different product →</button>` : ''}
             </div>
-            ${item.status === 'pending'
+            ${item.status === 'selected'
+              ? `<div class="item-qty-stepper" data-index="${i}">
+                   <button class="qty-btn qty-dec" data-index="${i}" ${(item.qty || 1) <= 1 ? 'disabled' : ''}>−</button>
+                   <span class="qty-count">${item.qty || 1}</span>
+                   <button class="qty-btn qty-inc" data-index="${i}">+</button>
+                 </div>`
+              : item.status === 'pending'
               ? `<div class="item-arrow">›</div>`
               : item.status === 'unavailable'
               ? `<div class="item-arrow" style="color:#e07040;">›</div>`
@@ -333,7 +617,9 @@ function renderGrocery(el) {
   });
 
   el.querySelectorAll('.grocery-item').forEach(row => {
-    row.addEventListener('click', async () => {
+    row.addEventListener('click', async (ev) => {
+      // Don't open the product picker when the tap was on the quantity stepper.
+      if (ev.target.closest('.item-qty-stepper')) return;
       const i = parseInt(row.dataset.index);
       const item = state.groceryItems[i];
       // "Try different product" button handles unavailable rows — skip raw row click
@@ -358,39 +644,69 @@ function renderGrocery(el) {
     });
   });
 
+  // Per-item quantity steppers (each selected item has its own count).
+  el.querySelectorAll('.qty-inc').forEach(btn => {
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const i = parseInt(btn.dataset.index);
+      const item = state.groceryItems[i];
+      item.qty = Math.min((item.qty || 1) + 1, 20);
+      saveData();
+      renderGrocery(el);
+    });
+  });
+  el.querySelectorAll('.qty-dec').forEach(btn => {
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const i = parseInt(btn.dataset.index);
+      const item = state.groceryItems[i];
+      if ((item.qty || 1) > 1) {
+        item.qty = item.qty - 1;
+        saveData();
+        renderGrocery(el);
+      }
+    });
+  });
+
   el.querySelector('#addCartBtn').addEventListener('click', async () => {
     // Only send items that are selected and not flagged unavailable
-    const selected = state.groceryItems.filter(i => i.status === 'selected' && i.itemId);
+    const selected = state.groceryItems.filter(i => i.status === 'selected' && i.itemId && i.productUrl);
     if (selected.length === 0) {
       alert('No products selected yet. Click each item to pick a product first.');
       return;
     }
 
-    // Only items with a known product URL can be auto-added
-    const urls = selected.map(i => i.productUrl).filter(Boolean);
-    if (urls.length === 0) {
-      alert('Product URLs not available. Try re-selecting your items.');
-      return;
-    }
+    // Build a per-item payload: each entry carries its own quantity.
+    const items = selected.map(i => ({
+      url: i.productUrl,
+      name: i.productName || i.name,
+      quantity: Math.max(1, Math.min(i.qty || 1, 20)),
+    }));
+    const totalUnits = items.reduce((s, it) => s + it.quantity, 0);
 
     // Show loading state on button
     const btn = el.querySelector('#addCartBtn');
     btn.disabled = true;
-    btn.textContent = `Adding ${urls.length} item${urls.length > 1 ? 's' : ''} to cart…`;
-
-    const itemNames = selected.map(i => i.productName || i.name);
+    btn.textContent = `Adding ${totalUnits} item${totalUnits > 1 ? 's' : ''} to cart…`;
 
     chrome.runtime.sendMessage(
-      { type: 'simplate_start_atc', urls, itemNames, fulfillment: state.fulfillmentPreference },
+      { type: 'simplate_start_atc', items, fulfillment: state.fulfillmentPreference },
       (response) => {
         btn.disabled = false;
         const added = response?.added ?? 0;
         const failed = response?.failed ?? [];
 
         failed.forEach(({ name }) => {
-          const item = state.groceryItems.find(i => i.name === name);
-          if (item) { item.status = 'unavailable'; item.sub = 'Out of stock or unavailable'; item.needsRetry = true; }
+          const item = state.groceryItems.find(i => (i.productName || i.name) === name || i.name === name);
+          if (item) {
+            item.status = 'unavailable';
+            item.sub = 'Unavailable — pick a different product';
+            item.needsRetry = true;
+            item.itemId = null;
+            item.productUrl = null;
+          }
         });
+        saveData();
         if (added > 0) {
           btn.textContent = `✓ Added ${added} item${added > 1 ? 's' : ''} — cart opening…`;
           setTimeout(() => renderGrocery(el), 3000);
@@ -441,6 +757,8 @@ function showProductPicker(ingredientName, products, itemIndex, groceryEl, clear
       gi.itemId = p.id;
       gi.productUrl = p.url;
       gi.needsRetry = false;
+      if (!gi.qty) gi.qty = 1;
+      saveData();
       modal.remove();
       renderGrocery(groceryEl);
     });
@@ -509,6 +827,7 @@ function renderMeals(el) {
               <div class="meal-meta">${m.calories_per_serving ? `🔥 ~${m.calories_per_serving} cal/serving` : m.meta}</div>
             </div>
             <div class="meal-card-actions">
+              <button class="meal-regen-btn" data-day="${today}" data-meal="${mi}" title="Regenerate this meal with AI">✦</button>
               <button class="meal-expand-btn" data-day="${today}" data-meal="${mi}">▾</button>
               <button class="heart-btn ${m.liked ? 'liked' : ''}" data-day="${today}" data-meal="${mi}">
                 ${m.liked ? '♥' : '♡'}
@@ -530,10 +849,6 @@ function renderMeals(el) {
           </div>
         `).join('')}
       </div>
-      ${meals.length > 0 ? `
-      <div class="regen-bar">
-        <button class="btn-full" id="regenBtn">Regenerate with AI ✦</button>
-      </div>` : ''}
     </div>
   `;
 
@@ -579,6 +894,7 @@ function renderMeals(el) {
             description: meal.description || null
           });
         }
+        saveData();
         renderMeals(el);
       } else {
         meal.liked = false;
@@ -588,40 +904,71 @@ function renderMeals(el) {
           }
         });
         meal.savedCategories = [];
+        saveData();
         renderMeals(el);
       }
     });
   });
 
-  const regenBtn = el.querySelector('#regenBtn');
-  if (regenBtn) {
-    regenBtn.addEventListener('click', async () => {
-      const today = state.currentDay;
-      regenBtn.disabled = true;
-      regenBtn.textContent = 'Generating…';
+  el.querySelectorAll('.meal-regen-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const d = parseInt(btn.dataset.day);
+      const mi = parseInt(btn.dataset.meal);
+      const dayMeals = state.meals[d] || [];
+      const meal = dayMeals[mi];
+      if (!meal) return;
+
+      const prevLabel = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '…';
+      btn.classList.add('regenerating');
+
+      // Avoid re-suggesting meals already planned that day (incl. this slot).
+      const exclude = dayMeals.map(m => m.name).filter(Boolean);
+
       try {
-        const res = await fetch('http://localhost:5000/chat', {
+        const res = await fetch('http://localhost:5000/regenerate-meal', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            messages: [{ role: 'user', content: `Suggest a new meal plan for ${days[today]}. Give me one recipe.` }],
+            meal_type: meal.type,
             dietary_restrictions: state.profileDietTags,
-            health_goals: state.profileGoalTags
+            health_goals: state.profileGoalTags,
+            exclude
           })
         });
         const data = await res.json();
         if (data.recipe && data.recipe.ingredients) {
-          showMealSlotPicker(data.recipe);
+          const r = data.recipe;
+          // Replace this slot in place, preserving its type. Reset like-state
+          // since it's a different recipe now.
+          dayMeals[mi] = {
+            type: meal.type,
+            name: r.recipe_name,
+            meta: `${r.servings} servings`,
+            calories_per_serving: r.calories_per_serving || null,
+            liked: false,
+            ingredients: r.ingredients,
+            instructions: r.instructions,
+            description: r.description
+          };
+          state.meals[d] = dayMeals;
+          saveData();
+          renderMeals(el);
         } else {
-          regenBtn.textContent = 'Regenerate with AI ✦';
-          regenBtn.disabled = false;
+          btn.disabled = false;
+          btn.textContent = prevLabel;
+          btn.classList.remove('regenerating');
+          alert(data.error || 'Could not regenerate this meal. Try again.');
         }
       } catch (e) {
-        regenBtn.textContent = 'Error — try again';
-        regenBtn.disabled = false;
+        btn.disabled = false;
+        btn.textContent = prevLabel;
+        btn.classList.remove('regenerating');
+        alert('Could not reach the backend. Is it running?');
       }
     });
-  }
+  });
 }
 
 // ── SAVED (their version) ────────────────────────────────
@@ -730,6 +1077,7 @@ function renderSaved(el) {
             state.savedMeals[newCat].push(meal);
           }
         });
+        saveData();
         renderSaved(el);
       });
     });
@@ -752,6 +1100,7 @@ function renderSaved(el) {
       const cat = btn.dataset.cat;
       const idx = parseInt(btn.dataset.index);
       state.savedMeals[cat].splice(idx, 1);
+      saveData();
       renderSaved(el);
     });
   });
@@ -834,6 +1183,7 @@ function showMealSlotPicker(recipe) {
       instructions: recipe.instructions,
       description: recipe.description
     });
+    saveData();
     modal.remove();
     renderTab('meals');
   });
@@ -980,6 +1330,7 @@ function renderProfile(el) {
       </div>
 
       <button class="signout-btn" id="signOutBtn">Sign out</button>
+      <button class="delete-account-btn" id="deleteAccountBtn">Delete this profile</button>
     </div>
   `;
 
@@ -987,7 +1338,7 @@ function renderProfile(el) {
     btn.addEventListener('click', () => {
       state.fulfillmentPreference = btn.dataset.val;
       state.fulfillmentSet = true;
-      chrome.storage.local.set({ fulfillmentPreference: state.fulfillmentPreference, fulfillmentSet: true });
+      saveData();
       el.querySelectorAll('.fulfill-pill').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
     });
@@ -995,44 +1346,34 @@ function renderProfile(el) {
 
   el.querySelector('#budgetInput').addEventListener('change', e => {
     state.weeklyBudget = parseInt(e.target.value) || 0;
-    chrome.storage.local.set({ weeklyBudget: state.weeklyBudget });
+    saveData();
   });
   el.querySelector('#caloriesInput').addEventListener('change', e => {
     state.dailyCalories = parseInt(e.target.value) || 0;
-    chrome.storage.local.set({ dailyCalories: state.dailyCalories });
+    saveData();
   });
   el.querySelector('#profileDecrement').addEventListener('click', () => {
     if (state.householdSize > 1) {
       state.householdSize--;
       el.querySelector('#profileHH').textContent = state.householdSize;
-      chrome.storage.local.set({ householdSize: state.householdSize });
+      saveData();
     }
   });
   el.querySelector('#profileIncrement').addEventListener('click', () => {
     state.householdSize++;
     el.querySelector('#profileHH').textContent = state.householdSize;
-    chrome.storage.local.set({ householdSize: state.householdSize });
+    saveData();
   });
 
   el.querySelector('#signOutBtn').addEventListener('click', () => {
-    chrome.storage.local.remove(['onboarded', 'fulfillmentPreference', 'fulfillmentSet', 'profileName', 'pixabotId', 'profileDietTags', 'profileGoalTags', 'householdSize', 'weeklyBudget', 'dailyCalories', 'nudgeDismissed'], () => {
-      Object.assign(state, {
-        diet: { lifestyle: [], allergies: [], other: '' },
-        goals: [],
-        householdSize: 1,
-        weeklyBudget: 120,
-        dailyCalories: 1800,
-        profileDietTags: [],
-        profileGoalTags: [],
-        pixabotId: null,
-        fulfillmentPreference: 'delivery',
-        chatMessages: [{ role: 'bot', text: "Hi! I'm Simplate, your nutrition assistant. Ask me anything about your cart or meal plan." }],
-        savedMeals: { Breakfast: [], Lunch: [], Dinner: [], Snacks: [] },
-        groceryItems: [],
-        currentTab: 'chat',
-      });
-      showStep('step-welcome');
-    });
+    // Save the active profile's current state, then fully clear session and
+    // return to the profile picker. loadProfileIntoState handles a full reset
+    // when another profile is selected, so no stale name/avatar bleeds through.
+    signOutToPicker();
+  });
+
+  el.querySelector('#deleteAccountBtn').addEventListener('click', () => {
+    if (state.activeProfileId) deleteProfile(state.activeProfileId);
   });
 
   const shuffleBtn = el.querySelector('#avatarShuffleBtn');
@@ -1043,7 +1384,7 @@ function renderProfile(el) {
 
   shuffleBtn.addEventListener('click', () => {
     state.pixabotId = randomPixabotId();
-    chrome.storage.local.set({ pixabotId: state.pixabotId });
+    saveData();
     loadPixabotImage(state.pixabotId, pixabotImg);
   });
 
@@ -1066,7 +1407,7 @@ function renderProfile(el) {
     nameDisplay.style.display = 'block';
     nameEditBtn.style.display = 'inline-flex';
     nameInput.style.display = 'none';
-    chrome.storage.local.set({ profileName: state.profileName });
+    saveData();
   });
   nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') nameInput.blur(); });
 
@@ -1103,10 +1444,10 @@ function renderProfile(el) {
       const val = btn.dataset.val;
       if (section === 'diet') {
         state.profileDietTags = state.profileDietTags.filter(t => t !== val);
-        chrome.storage.local.set({ profileDietTags: state.profileDietTags });
+        saveData();
       } else {
         state.profileGoalTags = state.profileGoalTags.filter(t => t !== val);
-        chrome.storage.local.set({ profileGoalTags: state.profileGoalTags });
+        saveData();
       }
       renderProfile(el);
     });
@@ -1153,18 +1494,17 @@ function addTag(val, section, tagsEl, el) {
   const tags = section === 'diet' ? state.profileDietTags : state.profileGoalTags;
   if (tags.map(t => t.toLowerCase()).includes(val.toLowerCase())) return;
   tags.push(val);
-  if (section === 'diet') chrome.storage.local.set({ profileDietTags: state.profileDietTags });
-  else chrome.storage.local.set({ profileGoalTags: state.profileGoalTags });
+  saveData();
   const span = document.createElement('span');
   span.className = 'tag-pill';
   span.innerHTML = `${val} <button class="tag-remove" data-section="${section}" data-val="${val}">×</button>`;
   span.querySelector('.tag-remove').addEventListener('click', () => {
     if (section === 'diet') {
       state.profileDietTags = state.profileDietTags.filter(t => t !== val);
-      chrome.storage.local.set({ profileDietTags: state.profileDietTags });
+      saveData();
     } else {
       state.profileGoalTags = state.profileGoalTags.filter(t => t !== val);
-      chrome.storage.local.set({ profileGoalTags: state.profileGoalTags });
+      saveData();
     }
     span.remove();
   });
@@ -1195,34 +1535,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     state.householdSize = parseInt(document.getElementById('hhCount')?.textContent) || 1;
 
-    chrome.storage.local.set({
-      onboarded: true,
-      profileDietTags: state.profileDietTags,
-      profileGoalTags: state.profileGoalTags,
-      householdSize: state.householdSize,
-    });
+    // Create the new profile and make it active.
+    state.activeProfileId = uuid();
+    ensurePixabotId(); // assigns a random avatar and persists via saveData()
+    persistActiveProfile(true);
+
     showStep('step-app');
     renderTab('chat');
   });
 
-  chrome.storage.local.get([
-    'onboarded', 'fulfillmentPreference', 'fulfillmentSet', 'profileName', 'pixabotId',
-    'profileDietTags', 'profileGoalTags', 'householdSize', 'weeklyBudget', 'dailyCalories', 'nudgeDismissed'
-  ], result => {
-    if (result.fulfillmentPreference) state.fulfillmentPreference = result.fulfillmentPreference;
-    if (result.profileName)     state.profileName     = result.profileName;
-    if (result.pixabotId)       state.pixabotId       = result.pixabotId;
-    if (result.profileDietTags) state.profileDietTags = result.profileDietTags;
-    if (result.profileGoalTags) state.profileGoalTags = result.profileGoalTags;
-    if (result.householdSize)   state.householdSize   = result.householdSize;
-    if (result.weeklyBudget)    state.weeklyBudget    = result.weeklyBudget;
-    if (result.dailyCalories)   state.dailyCalories   = result.dailyCalories;
-    if (result.fulfillmentSet)  state.fulfillmentSet  = result.fulfillmentSet;
-    if (result.nudgeDismissed)  state.nudgeDismissed  = result.nudgeDismissed;
-    if (result.onboarded) {
-      ensurePixabotId();
-      showStep('step-app');
-      renderTab('chat');
+  // ── Launch routing ──
+  // If profiles exist → show picker. Otherwise → onboarding (welcome).
+  chrome.storage.local.get(['profiles', 'activeProfileId'], ({ profiles, activeProfileId }) => {
+    const list = Array.isArray(profiles) ? profiles : [];
+    if (list.length === 0) {
+      showStep('step-welcome');
+      return;
     }
+    showStep('step-profiles');
+    renderProfilePicker();
   });
 });

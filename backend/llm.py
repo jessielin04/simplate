@@ -58,3 +58,66 @@ def chat(messages: list, dietary_restrictions: list, health_goals: list) -> str:
         messages=groq_messages
     )
     return response.choices[0].message.content
+
+
+def regenerate_meal(
+    meal_type: str,
+    dietary_restrictions: list,
+    health_goals: list,
+    exclude: list = None,
+) -> dict:
+    """Generate a single recipe for one meal slot (e.g. BREAKFAST).
+
+    Uses a higher temperature and an explicit 'avoid these' list so repeated
+    calls don't collapse to the same generic recipe (the cause of the
+    'always chicken and vegetables' behavior).
+    """
+    import random
+
+    restrictions_str = ", ".join(dietary_restrictions) if dietary_restrictions else "none"
+    goals_str = ", ".join(health_goals) if health_goals else "general healthy eating"
+    exclude = exclude or []
+    exclude_str = "; ".join(exclude) if exclude else "none"
+
+    slot = (meal_type or "meal").strip().lower()
+
+    # A rotating nudge adds genuine variety across calls without overriding
+    # the user's actual restrictions/goals.
+    variety_angles = [
+        "Lean into a different cuisine than usual.",
+        "Use a different primary protein or main ingredient than a typical default.",
+        "Make it seasonal and fresh.",
+        "Aim for something quick and weeknight-friendly.",
+        "Try a comforting, hearty take.",
+        "Go for bright, light, and simple.",
+    ]
+    angle = random.choice(variety_angles)
+
+    user_prompt = (
+        f"Suggest exactly ONE {slot} recipe.\n"
+        f"Dietary restrictions: {restrictions_str}\n"
+        f"Health goals: {goals_str}\n"
+        f"Do NOT suggest any of these recipes (already planned): {exclude_str}.\n"
+        f"{angle}\n"
+        f"Make it clearly different from a generic chicken-and-vegetables dish.\n"
+        f"Respond with the JSON object only."
+    )
+
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.9,
+        top_p=0.95,
+        seed=random.randint(1, 1_000_000),
+    )
+
+    raw_text = response.choices[0].message.content.strip()
+    if raw_text.startswith("```"):
+        raw_text = raw_text.split("```")[1]
+        if raw_text.startswith("json"):
+            raw_text = raw_text[4:]
+
+    return json.loads(raw_text)

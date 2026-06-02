@@ -7,6 +7,20 @@
 </head>
 <body>
 
+<!-- Step: Profile Picker (shown on launch when profiles exist) -->
+<div id="step-profiles" class="step">
+  <div class="profiles-screen">
+    <div class="profiles-brand">
+      <img src="assets/reg_logo.svg" class="profiles-brand-img" alt="" /> Simplate
+    </div>
+    <h2 class="profiles-heading">Who's cooking?</h2>
+    <div class="profiles-grid" id="profilesGrid">
+      <!-- profile cards injected by JS -->
+    </div>
+    <button class="profiles-manage-toggle" id="profilesManageToggle">Manage profiles</button>
+  </div>
+</div>
+
 <!-- Step 0: Welcome -->
 <div id="step-welcome" class="step active">
   <div class="welcome-screen">
@@ -66,7 +80,7 @@
 
     <div class="section-label">I WANT TO</div>
     <div class="pill-grid vertical">
-      <button class="pill selected" data-group="goal">Lose weight</button>
+      <button class="pill" data-group="goal">Lose weight</button>
       <button class="pill" data-group="goal">Build muscle</button>
       <button class="pill" data-group="goal">More energy</button>
       <button class="pill" data-group="goal">Manage diabetes</button>

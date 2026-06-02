@@ -1448,3 +1448,223 @@ body {
   font-weight: 400;
   font-style: italic;
 }
+/* ── Profile Picker ────────────────────────────────────── */
+#step-profiles {
+  background: #4a7c59;
+  align-items: center;
+  justify-content: center;
+}
+.profiles-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 24px 20px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.profiles-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  margin-bottom: 28px;
+}
+.profiles-brand-img { width: 26px; height: 26px; object-fit: contain; }
+.profiles-heading {
+  color: #fff;
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 28px;
+}
+.profiles-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 18px;
+  width: 100%;
+  max-width: 320px;
+  margin-bottom: 24px;
+}
+.profile-card {
+  background: none;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  padding: 8px;
+  position: relative;
+}
+.profile-card-avatar {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: #f0ede8;
+  border: 3px solid rgba(255,255,255,0.85);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+.profile-card:hover .profile-card-avatar,
+.profile-card:focus-visible .profile-card-avatar {
+  transform: scale(1.05);
+  border-color: #fff;
+}
+.profile-card-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.profile-card-avatar.placeholder-add {
+  background: rgba(255,255,255,0.12);
+  border: 2px dashed rgba(255,255,255,0.7);
+  font-size: 34px;
+  color: #fff;
+  font-weight: 300;
+}
+.profile-card-name {
+  color: #eaf3ec;
+  font-size: 14px;
+  font-weight: 600;
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.profile-card-delete {
+  position: absolute;
+  top: 2px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: #d5825f;
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+}
+.profiles-grid.managing .profile-card-delete { display: flex; }
+.profiles-grid.managing .profile-card.add-card .profile-card-delete { display: none; }
+.profiles-manage-toggle {
+  background: none;
+  border: 1px solid rgba(255,255,255,0.45);
+  color: #eaf3ec;
+  font-size: 13px;
+  padding: 8px 18px;
+  border-radius: 20px;
+  cursor: pointer;
+}
+.profiles-manage-toggle:hover { background: rgba(255,255,255,0.12); }
+.profiles-manage-toggle.active { background: rgba(255,255,255,0.18); color: #fff; }
+
+/* Delete-account button in profile tab */
+.delete-account-btn {
+  width: 100%;
+  background: none;
+  border: none;
+  color: #c0392b;
+  font-size: 13px;
+  padding: 10px;
+  cursor: pointer;
+  margin: 0 0 4px;
+  text-align: center;
+}
+.delete-account-btn:hover { color: #962d22; text-decoration: underline; }
+
+/* ── ATC quantity stepper (List tab) ───────────────────── */
+.atc-qty-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding: 0 2px;
+}
+.atc-qty-label {
+  font-size: 13px;
+  color: #7a8f82;
+  font-weight: 600;
+}
+.atc-qty-stepper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.atc-qty-stepper #atcQtyCount {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a2e22;
+  min-width: 22px;
+  text-align: center;
+}
+.atc-qty-stepper .stepper-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.atc-qty-stepper .stepper-btn:disabled:hover {
+  background: inherit;
+  color: inherit;
+}
+
+/* ── Per-slot Regenerate button (Meals tab) ────────────── */
+.meal-regen-btn {
+  background: none;
+  border: none;
+  font-size: 15px;
+  color: #4a7c59;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+.meal-regen-btn:hover { color: #2a5c3a; transform: scale(1.12); }
+.meal-regen-btn:disabled { cursor: default; opacity: 0.7; }
+.meal-regen-btn.regenerating {
+  animation: regen-spin 0.8s linear infinite;
+}
+@keyframes regen-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Per-item quantity stepper (List rows) ─────────────── */
+.item-qty-stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.item-qty-stepper .qty-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1.5px solid #cdded3;
+  background: #fff;
+  color: #2a5c3a;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.item-qty-stepper .qty-btn:hover:not(:disabled) {
+  background: #4a7c59;
+  color: #fff;
+  border-color: #4a7c59;
+}
+.item-qty-stepper .qty-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.item-qty-stepper .qty-count {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a2e22;
+  min-width: 16px;
+  text-align: center;
+}

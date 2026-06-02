@@ -5,49 +5,62 @@ chrome.action.onClicked.addListener((tab) => {
 //ACT Process: is msg a cart request? 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type !== 'simplate_start_atc') return;
-  //walmart product URLs to add 
-  const { urls, fulfillment = 'delivery', itemNames = [] } = msg;
-  if (!urls || urls.length === 0) {
+  // New payload: items = [{ url, name, quantity }]. Fall back to legacy fields.
+  let items = Array.isArray(msg.items) ? msg.items : null;
+  if (!items) {
+    const { urls = [], itemNames = [], quantity = 1 } = msg;
+    items = urls.map((url, i) => ({ url, name: itemNames[i] || url, quantity }));
+  }
+  const fulfillment = msg.fulfillment || 'delivery';
+  if (items.length === 0) {
     sendResponse({ done: true, added: 0, failed: [] });
     return true;
   }
   //cart process, open cart tab when done 
-  addItemsSequentially(urls, itemNames, fulfillment).then(({ added, failed }) => {
+  addItemsSequentially(items, fulfillment).then(({ added, failed }) => {
     openOrReloadCart();
     sendResponse({ done: true, added, failed });
   });
 
   return true;
 });
-//products are added one aat a time (due to Walmart's cart only being able to handle one product at a time reliably)
-async function addItemsSequentially(urls, itemNames, fulfillment) {
-  let added = 0;
+//products are added one at a time (Walmart's cart handles one product reliably)
+async function addItemsSequentially(items, fulfillment) {
+  let added = 0;          // total units successfully added across all products
   const failed = []; // { name, reason }
-  //opens real brower window minimized bcs Walmart throttles JS in hidden/inactive tabs
+  //opens real browser window minimized bcs Walmart throttles JS in hidden/inactive tabs
   let atcWindow;
   try {
-    atcWindow = await chrome.windows.create({ url: urls[0], type: 'normal', state: 'minimized' });
+    atcWindow = await chrome.windows.create({ url: items[0].url, type: 'normal', state: 'minimized' });
   } catch (e) {
     console.error('[simplate] could not create ATC window:', e);
-    return { added: 0, failed: itemNames.map(n => ({ name: n, reason: 'Could not open window' })) };
+    return { added: 0, failed: items.map(it => ({ name: it.name, reason: 'Could not open window' })) };
   }
   const tab = atcWindow.tabs[0];
-  //for each product: nav window to product URL, wait to fully load, wait extra for Walmart to render ): confirm content.js is ready, then add to cart
-  for (let i = 0; i < urls.length; i++) {
-    if (i > 0) {
-      await chrome.tabs.update(tab.id, { url: urls[i] });
+  let firstLoad = true;
+  //for each product: navigate once, add to cart once, then ask content.js to
+  //bump Walmart's native on-page quantity stepper up to the requested count.
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    const wantQty = Math.max(1, Math.min(parseInt(it.quantity) || 1, 20));
+
+    if (!firstLoad) {
+      await chrome.tabs.update(tab.id, { url: it.url });
     }
+    firstLoad = false;
 
     await waitForTabLoad(tab.id);
     await sleep(3500);
     await waitForContentScript(tab.id);
 
-    const result = await sendATCMessage(tab.id, fulfillment);
+    const result = await sendATCMessage(tab.id, fulfillment, wantQty);
     if (result.success) {
-      added++;
-      await sleep(3000);
+      // content.js reports how many units it actually reached (1..wantQty).
+      const units = result.units || 1;
+      added += units;
+      await sleep(2500);
     } else {
-      failed.push({ name: itemNames[i] || urls[i], reason: result.reason || 'Unknown error' });
+      failed.push({ name: it.name, reason: result.reason || 'Unknown error' });
       await sleep(1500);
     }
   }
@@ -77,15 +90,16 @@ function waitForContentScript(tabId, timeoutMs = 8000) {
   });
 }
 
-// Returns { success, reason } instead of just boolean
-async function sendATCMessage(tabId, fulfillment) {
+// Returns { success, reason, units }
+async function sendATCMessage(tabId, fulfillment, quantity = 1) {
+  const payload = { type: 'simplate_atc', fulfillment, quantity };
   try {
-    const response = await chrome.tabs.sendMessage(tabId, { type: 'simplate_atc', fulfillment });
+    const response = await chrome.tabs.sendMessage(tabId, payload);
     return response || { success: false, reason: 'No response' };
   } catch (e) {
     await sleep(1500);
     try {
-      const response = await chrome.tabs.sendMessage(tabId, { type: 'simplate_atc', fulfillment });
+      const response = await chrome.tabs.sendMessage(tabId, payload);
       return response || { success: false, reason: 'No response' };
     } catch (_) {
       return { success: false, reason: 'Could not reach content script' };

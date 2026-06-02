@@ -40,12 +40,15 @@ def search_ingredient(ingredient: str, max_results: int = 5) -> list[dict]:
             continue
 
         price = f"${price_val:.2f}"
-        url = item.get("url")
         item_id = item.get("id")
         name = item.get("name") or item.get("title")
         image = item.get("image") or item.get("thumbnail")
+        url = normalize_walmart_url(item.get("url"), item_id)
 
-        if name:
+        # A correct product URL is required — without one, ATC would land on the
+        # wrong page and add adjacent/recommended products. Skip if we can't
+        # build a canonical /ip/ link.
+        if name and url:
             results.append({
                 "id": str(item_id) if item_id else None,
                 "name": name,
@@ -60,6 +63,29 @@ def search_ingredient(ingredient: str, max_results: int = 5) -> list[dict]:
     print(f"[scraper] got {len(results)} results for '{ingredient}'")
     _cache[cache_key] = results
     return results
+
+
+def normalize_walmart_url(raw_url, item_id=None):
+    """Return an absolute canonical Walmart product URL (https://www.walmart.com/ip/...)
+    or None if one can't be derived.
+
+    Prefer the scraper's actual product `url` when it's a real /ip/ link — the
+    id-constructed form (/ip/<id>) does NOT always resolve and can 404. Only
+    fall back to the id form when no usable url is present.
+    """
+    # 1) Use the provided url if it points at a real product detail page.
+    if isinstance(raw_url, str) and raw_url.strip():
+        u = raw_url.strip()
+        if u.startswith("/"):
+            u = "https://www.walmart.com" + u
+        if "walmart.com/ip/" in u:
+            return u.split("?")[0]  # strip tracking params
+
+    # 2) Fallback: construct from the item id (less reliable, may 404).
+    if item_id:
+        return f"https://www.walmart.com/ip/{item_id}"
+
+    return None
 
 
 def clear_cache():
