@@ -22,7 +22,7 @@ const state = {
   savedSearch: '',
   savedFilter: 'All',
   chatMessages: [
-    { role: 'bot', text: "Hi! I'm Simplate, your nutrition assistant. Ask me anything about your cart or meal plan." }
+    { role: 'bot', text: "Hi! I'm Plately, your nutrition assistant. Ask me anything about your cart or meal plan." }
   ]
 };
 
@@ -106,7 +106,7 @@ function loadProfileIntoState(p) {
 
   // Chat always starts fresh.
   state.chatMessages = [
-    { role: 'bot', text: "Hi! I'm Simplate, your nutrition assistant. Ask me anything about your cart or meal plan." }
+    { role: 'bot', text: "Hi! I'm Plately, your nutrition assistant. Ask me anything about your cart or meal plan." }
   ];
   state.nudgeDismissed = false;
   state.currentTab = 'chat';
