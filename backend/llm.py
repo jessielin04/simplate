@@ -52,7 +52,7 @@ def chat(messages: list, dietary_restrictions: list, health_goals: list) -> str:
     grok_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     for msg in messages:
         role = "user" if msg["role"] == "user" else "assistant"
-        groq_messages.append({"role": role, "content": msg["content"]})
+        grok_messages.append({"role": role, "content": msg["content"]})
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=grok_messages
