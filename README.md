@@ -10,7 +10,7 @@ An AI-powered Chrome extension that acts as your personal nutrition assistant in
 
 - Google Chrome
 - Python 3.9+
-- A [Groq API key](https://console.groq.com) (free)
+- A [xAI API key]((https://console.x.ai/home)) (free)
 - A [ScraperAPI key](https://www.scraperapi.com) (free tier available)
 
 ---
@@ -33,7 +33,7 @@ pip install flask flask-cors groq httpx python-dotenv
 Create a `.env` file in the `backend/` folder:
 
 ```
-GROQ_API_KEY=your_groq_key_here
+GROK_API_KEY=your_grok_key_here
 SCRAPER_API_KEY=your_scraperapi_key_here
 ```
 
@@ -94,7 +94,7 @@ When you open Simplate, you land on a **profile picker** ("Who's cooking?"). Pic
 
 **Extension not appearing**: make sure you selected the `frontend/` folder, not the repo root, when loading unpacked.
 
-**Chat not responding**: confirm the backend is running (`python main.py`) and check that your `GROQ_API_KEY` is set in `.env`.
+**Chat not responding**: confirm the backend is running (`python main.py`) and check that your `GROK_API_KEY` is set in `.env`.
 
 **Chat not responding on Mac (403 error or port in use)**: macOS uses port 5000 for the **AirPlay Receiver**, which collides with the backend. Two fixes:
 1. Turn it off: **System Settings → General → AirDrop & Handoff → AirPlay Receiver → Off**, then restart the backend.
