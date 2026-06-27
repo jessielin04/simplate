@@ -1,10 +1,10 @@
-from grok import Grok
+from groq import Groq
 import json
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
-client = Grok(api_key=os.getenv("GROK_API_KEY"))
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 SYSTEM_PROMPT = """You are a healthy meal planning assistant. Your job is to suggest recipes based on the user's dietary restrictions and health goals.
 
@@ -49,13 +49,13 @@ def get_recipe(user_preferences: str, dietary_restrictions: list, health_goals: 
     return json.loads(raw_text)
 
 def chat(messages: list, dietary_restrictions: list, health_goals: list) -> str:
-    grok_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    groq_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     for msg in messages:
         role = "user" if msg["role"] == "user" else "assistant"
-        grok_messages.append({"role": role, "content": msg["content"]})
+        groq_messages.append({"role": role, "content": msg["content"]})
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
-        messages=grok_messages
+        messages=groq_messages
     )
     return response.choices[0].message.content
 
