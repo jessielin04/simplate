@@ -23,7 +23,7 @@ An AI-powered Chrome extension that acts as your personal nutrition assistant in
 cd backend
 python -m venv venv
 venv\Scripts\activate
-pip install flask flask-cors groq httpx python-dotenv
+pip install flask flask-cors grok httpx python-dotenv
 ```
 
 > **Mac:** use `python3 -m venv venv` to create the environment, and `source venv/bin/activate` to activate it (instead of `venv\Scripts\activate`).
